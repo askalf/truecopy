@@ -1,0 +1,15 @@
+{
+  "name": "filesystem",
+  "tools": [
+    {
+      "name": "read_file",
+      "description": "Read the contents of a file at the given path and return it as text.",
+      "inputSchema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] }
+    },
+    {
+      "name": "list_directory",
+      "description": "List the files and folders in a directory.",
+      "inputSchema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] }
+    }
+  ]
+}

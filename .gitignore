@@ -1,0 +1,5 @@
+node_modules/
+canon.lock
+*.log
+.DS_Store
+.canon/
