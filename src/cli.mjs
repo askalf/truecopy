@@ -1,16 +1,30 @@
 #!/usr/bin/env node
 // canon CLI — vet, pin, and verify agent skills & MCP servers.
 // Exit code is a CI gate: 0 = all clean, 1 = anything flagged / drifted / poisoned.
+import { spawnSync } from 'node:child_process';
 import { scan, pin, verify, diff, readLock } from './index.mjs';
 
 const argv = process.argv.slice(2);
-const cmd = argv[0];
+const sep = argv.indexOf('--');
+const pre = sep >= 0 ? argv.slice(0, sep) : argv;
+const post = sep >= 0 ? argv.slice(sep + 1) : []; // wrapped command, for `canon guard -- <cmd>`
+const cmd = pre[0];
 const opt = (name, def) => {
-  const a = argv.find((x) => x === name || x.startsWith(name + '='));
-  if (!a) return def;
-  return a.includes('=') ? a.slice(a.indexOf('=') + 1) : true;
+  const i = pre.indexOf(name);
+  if (i >= 0) { const nx = pre[i + 1]; return nx !== undefined && !nx.startsWith('--') ? nx : true; } // `--name value` or bare `--name`
+  const eq = pre.find((x) => x.startsWith(name + '='));
+  return eq ? eq.slice(name.length + 1) : def;
 };
-const sources = argv.slice(1).filter((a) => !a.startsWith('--'));
+const VALUE_FLAGS = new Set(['--lock', '--name']); // consume the next token as a value
+const sources = (() => {
+  const out = [];
+  for (let i = 1; i < pre.length; i++) {
+    const a = pre[i];
+    if (a.startsWith('--')) { if (VALUE_FLAGS.has(a) && pre[i + 1] && !pre[i + 1].startsWith('--')) i++; continue; }
+    out.push(a);
+  }
+  return out;
+})();
 const lockPath = opt('--lock', 'canon.lock');
 
 const tty = process.stdout.isTTY;
@@ -28,6 +42,11 @@ function usage() {
   canon verify [--lock <file>]      re-check every pinned skill for drift / poisoning
   canon diff <source> [--name <n>]  show what changed since it was pinned
   canon list                        show the pinned set
+  canon guard [--lock <file>] -- <cmd...>   verify the lock, then run <cmd> only if it's clean
+
+  canon-mcp [--lock] [--name] [--strict] -- <mcp-server cmd...>
+                                    enforce the lock on a LIVE MCP server: only vetted,
+                                    unmodified, unpoisoned tools reach the client
 
   Exit 1 on any flagged / drifted / poisoned result — drop it in CI.`);
 }
@@ -102,6 +121,20 @@ function runList() {
   return 0;
 }
 
-const table = { scan: runScan, add: runAdd, verify: runVerify, diff: runDiff, list: runList };
+function runGuard() {
+  if (!post.length) { out('usage: canon guard [--lock <file>] -- <command...>'); return 2; }
+  const { ok, results } = verify({ lockPath });
+  if (!ok) {
+    const bad = results.filter((r) => r.status !== 'ok');
+    out(`${c(C.red, '⛔ canon: refusing to launch —')} ${bad.length} of ${results.length} skill(s) failed:`);
+    bad.forEach((r) => out(`   ${mark[r.status] || '?'} ${c(C.bold, r.name)}: ${r.status}`));
+    return 1;
+  }
+  out(c(C.dim, `canon: ${results.length} pinned skill(s) verified — launching`));
+  const res = spawnSync(post[0], post.slice(1), { stdio: 'inherit' });
+  return res.status ?? (res.error ? 127 : 0);
+}
+
+const table = { scan: runScan, add: runAdd, verify: runVerify, diff: runDiff, list: runList, guard: runGuard };
 if (!cmd || cmd === '-h' || cmd === '--help' || !table[cmd]) { usage(); process.exit(cmd && cmd !== '-h' && cmd !== '--help' ? 2 : 0); }
 process.exit(table[cmd]());

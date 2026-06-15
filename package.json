@@ -4,7 +4,8 @@
   "description": "own your agent skills — vet, sign, and pin every skill & MCP server before it runs. The supply-chain gate for AI agents. Part of Own Your Stack.",
   "type": "module",
   "bin": {
-    "canon": "./src/cli.mjs"
+    "canon": "./src/cli.mjs",
+    "canon-mcp": "./src/mcp-cli.mjs"
   },
   "exports": {
     ".": "./src/index.mjs"

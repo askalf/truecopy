@@ -21,6 +21,7 @@ canon add  ./mcp-server.json --sign   # vet + pin into canon.lock (refuses a poi
 canon verify                          # re-check every pinned skill for drift / poisoning  (CI: exit 1 on any fail)
 canon diff ./mcp-server.json          # what changed since you pinned it
 canon list                            # the pinned set
+canon guard -- npm start              # verify the lock, then launch only if it's clean
 ```
 
 ```text
@@ -36,6 +37,26 @@ $ canon verify
 ```
 
 Run the whole story: `npm run demo`.
+
+## Runtime gate — enforce the lock
+
+Scanning and pinning are *checks*. canon also **enforces** the lock at runtime, so an unvetted or drifted tool never reaches the agent:
+
+**`canon-mcp`** — a drop-in MCP proxy. Point your MCP client at it instead of the server; only tools that are pinned, unmodified, and unpoisoned pass through `tools/list`, and calls to anything it dropped are blocked:
+
+```bash
+canon-mcp --lock canon.lock --name filesystem -- npx -y @modelcontextprotocol/server-filesystem /workspace
+```
+
+A silently-added, drifted, or poisoned tool is stripped from `tools/list` (the agent never sees it); a call to one comes back as a normal tool error. `--strict` blocks the *entire* server if anything is off, instead of stripping the bad tools.
+
+**`canon guard`** — a launch gate. Verify the lock, then run a command only if it's clean:
+
+```bash
+canon guard -- npm start        # refuses to launch (exit 1) if any pinned skill drifted or turned poisonous
+```
+
+So canon spans the whole lifecycle: **scan → pin → verify (CI) → enforce (runtime).** Where [warden](https://github.com/askalf/warden) firewalls what a tool *does*, canon-mcp gates which tools *exist*.
 
 ## What you can pin
 
