@@ -89,5 +89,9 @@ if (r.verdict === 'flagged') throw new Error('poisoned skill');
 verify();                                 // { ok, results: [{ name, status: 'ok'|'drifted'|'poisoned'|... }] }
 ```
 
+## The agent-security stack
+
+Three composable layers, one defense: **[warden](https://github.com/askalf/warden)** contains the call · **[canon](https://github.com/askalf/canon)** vets the tool *(you are here)* · **[keeper](https://github.com/askalf/keeper)** holds the keys. Run all three together → **[agent-security-stack](https://github.com/askalf/agent-security-stack)**.
+
 ---
 Part of **[Own Your Stack](https://github.com/askalf)** — own your AI infrastructure instead of renting it. Built by Thomas Sprayberry.
