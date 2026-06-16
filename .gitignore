@@ -3,3 +3,6 @@ canon.lock
 *.log
 .DS_Store
 .canon/
+
+# commit-message scratch
+*.tmp
