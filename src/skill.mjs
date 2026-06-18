@@ -8,8 +8,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sha256, canonicalJson } from './hash.mjs';
 
-const TEXT_EXT = /\.(md|markdown|txt|json|ya?ml|toml|js|mjs|cjs|ts|py|rb|sh|ps1|html?)$/i;
-const SKIP_DIR = /(^|[\\/])(\.git|node_modules|\.canon)([\\/]|$)/;
+// Scan everything that ISN'T known-binary, rather than an allowlist of "text"
+// extensions — a poisoned prompt hides just as well in a `.bin`/`.dat`/`.mdx`
+// file, a Dockerfile, a Makefile, or an extension-less script.
+const BINARY_EXT = /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|pdf|zip|gz|tgz|bz2|xz|7z|rar|woff2?|ttf|otf|eot|mp[34]|wav|ogg|webm|mov|avi|mkv|flac|wasm|so|dylib|dll|exe|class|jar|o|a|node|pyc|pyd)$/i;
+// node_modules is bundled runtime code that actually loads — it must be hashed
+// AND scanned; only VCS/canon metadata is outside the trust boundary.
+const SKIP_DIR = /(^|[\\/])(\.git|\.canon)([\\/]|$)/;
 
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -31,9 +36,10 @@ export function loadSkill(source) {
       path: path.relative(source, f).replace(/\\/g, '/'),
       hash: sha256(fs.readFileSync(f)),
     }));
-    // scan the text/instruction files — that's where poisoned prompts hide
+    // scan every non-binary file — that's where poisoned prompts hide, and an
+    // attacker will pick whatever extension the scanner ignores
     const scanText = files
-      .filter((f) => TEXT_EXT.test(f))
+      .filter((f) => !BINARY_EXT.test(f))
       .map((f) => fs.readFileSync(f, 'utf8'))
       .join('\n');
     return {
@@ -49,9 +55,13 @@ export function loadSkill(source) {
     try { j = JSON.parse(raw); } catch {}
     const tools = j?.tools ?? (Array.isArray(j) ? j : null);
     if (tools && Array.isArray(tools)) {
+      const manifestEnvelope = { ...j }; delete manifestEnvelope.tools;  // top-level fields: name/instructions/command/args/env/url/etc.
       return {
         source, kind: 'mcp', name: j?.name ?? path.basename(source),
-        tools, hashInput: canonicalJson(tools), scanTargets: tools,
+        tools, manifestEnvelope,
+        launch: { command: j?.command, args: j?.args, env: j?.env, url: j?.url },
+        hashInput: canonicalJson(j),                          // whole manifest → renamed server / swapped command/env drifts
+        scanTargets: [...tools, { name: (j?.name ?? 'manifest') + ' (manifest)', description: canonicalJson(manifestEnvelope) }],
       };
     }
   }

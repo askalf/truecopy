@@ -23,7 +23,8 @@ test('gateTools never throws on a hostile tool list', () => {
   assert.deepEqual(gateTools(null), { report: [], allowed: new Set() });
   const r = gateTools([null, { name: 'ok' }], { parts: { ok: sha256(canonicalJson({ name: 'ok' })) } });
   assert.equal(r.report.length, 1);
-  assert.ok(r.allowed.has('ok'));
+  // `allowed` is keyed by content hash now, not by name
+  assert.ok(r.allowed.has(sha256(canonicalJson({ name: 'ok' }))));
 });
 
 test('scanSkill never throws on malformed scan targets', () => {
@@ -48,15 +49,33 @@ test('inspectServer drops null/malformed tools from a tools/list without throwin
   assert.ok(tools.every((t) => t && typeof t === 'object'), 'no null entries survive');
 });
 
-test('readLock coerces a hostile lock; verify never throws', () => {
+test('readLock coerces a hostile-but-parseable lock; verify never throws', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-fs-'));
-  for (const body of ['{"skills":null}', '{"skills":"evil"}', '[]', 'not json', '{"skills":[1,2]}']) {
+  // A lock that parses to an OBJECT but carries a hostile `skills` shape is
+  // coerced to a safe empty object — that's the fail-SAFE half of the contract.
+  for (const body of ['{"skills":null}', '{"skills":"evil"}', '{"skills":[1,2]}']) {
     const p = path.join(dir, 'canon.lock');
     fs.writeFileSync(p, body);
     const lock = readLock(p);
     assert.equal(typeof lock.skills, 'object');
     assert.ok(lock.skills && !Array.isArray(lock.skills), 'skills is a plain object');
     assert.doesNotThrow(() => verify({ lockPath: p }), `verify threw for ${body}`);
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('readLock fails CLOSED on a corrupt/non-object lock; verify reports error without throwing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-fs2-'));
+  // An unparseable lock or a parseable-but-not-an-object lock must NOT degrade to
+  // "nothing pinned, all clear" — readLock throws ELOCKCORRUPT and verify surfaces it.
+  for (const body of ['not json', '[]', '', '<<<<<<< HEAD\n{"skills":{}}']) {
+    const p = path.join(dir, 'canon.lock');
+    fs.writeFileSync(p, body);
+    assert.throws(() => readLock(p, { mustExist: true }), /unparseable|not a lock object/, `readLock should throw for ${JSON.stringify(body)}`);
+    let r;
+    assert.doesNotThrow(() => { r = verify({ lockPath: p }); }, `verify threw for ${JSON.stringify(body)}`);
+    assert.equal(r.ok, false, `verify must fail closed for ${JSON.stringify(body)}`);
+    assert.ok(r.error, 'verify surfaces the lock error');
   }
   fs.rmSync(dir, { recursive: true, force: true });
 });

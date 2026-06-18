@@ -5,10 +5,10 @@
 import { sha256, canonicalJson } from './hash.mjs';
 import { scanSkill } from './scan.mjs';
 
-const toolHash = (t) => sha256(canonicalJson(t));
+export const toolHash = (t) => sha256(canonicalJson(t));   // export it for mcp.mjs
 
 /**
- * → { report: [{ tool, status }], allowed: Set<name> }
+ * → { report: [{ tool, hash, status }], allowed: Set<contentHash> }
  * status: vetted | drifted | unvetted | unpinned | poisoned
  */
 export function gateTools(tools = [], entry = null) {
@@ -20,14 +20,19 @@ export function gateTools(tools = [], entry = null) {
   tools = tools.filter((t) => t && typeof t === 'object');
   const parts = (entry && entry.parts && typeof entry.parts === 'object') ? entry.parts : {};
   const poisoned = new Set(scanSkill({ scanTargets: tools }).findings.map((f) => f.tool));
+  const nameCounts = {};
+  for (const t of tools) nameCounts[t.name] = (nameCounts[t.name] || 0) + 1;
   const report = tools.map((t) => {
+    const h = toolHash(t);
     const status =
       poisoned.has(t.name) ? 'poisoned'        // injection/exfil in name/desc/schema — never serve
         : !entry ? 'unpinned'                  // this server isn't in the lock at all
-          : !(t.name in parts) ? 'unvetted'    // a tool you never pinned (e.g. silently added)
-            : parts[t.name] !== toolHash(t) ? 'drifted' // pinned, but its definition changed
-              : 'vetted';
-    return { tool: t.name, status };
+          : nameCounts[t.name] > 1 ? 'drifted' // duplicate name → not trustworthy by name
+            : !(t.name in parts) ? 'unvetted'  // a tool you never pinned (e.g. silently added)
+              : parts[t.name] !== h ? 'drifted' // pinned, but its definition changed
+                : 'vetted';
+    return { tool: t.name, hash: h, status };
   });
-  return { report, allowed: new Set(report.filter((r) => r.status === 'vetted').map((r) => r.tool)) };
+  // allowed keyed by CONTENT HASH so the runtime filter can drop a same-named drifted twin
+  return { report, allowed: new Set(report.filter((r) => r.status === 'vetted').map((r) => r.hash)) };
 }

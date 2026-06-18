@@ -13,8 +13,14 @@ export { loadSkill, skillHash, scanSkill, readLock, writeLock, DEFAULT_LOCK };
 // drift can be explained as added / removed / changed parts — not just "the hash moved".
 function partsOf(skill) {
   if (skill.kind === 'skill') return Object.fromEntries(skill.files.map((f) => [f.path, f.hash]));
-  if (skill.kind === 'mcp')
-    return Object.fromEntries(skill.tools.map((t, i) => [t.name || `tool[${i}]`, sha256(canonicalJson(t))]));
+  if (skill.kind === 'mcp') {
+    const parts = Object.fromEntries(skill.tools.map((t, i) => [t.name || `tool[${i}]`, sha256(canonicalJson(t))]));
+    // The manifest envelope (name/instructions/command/args/env/url/…) is part of
+    // the pinned identity too, so a renamed server or a swapped launch command is
+    // an explainable drift, not an invisible one.
+    if (skill.manifestEnvelope) parts['(manifest)'] = sha256(canonicalJson(skill.manifestEnvelope));
+    return parts;
+  }
   return { [skill.name]: sha256(skill.hashInput) };
 }
 
@@ -36,15 +42,19 @@ export function pin(source, { lockPath = DEFAULT_LOCK, sign = false, force = fal
     source: skill.source, kind: skill.kind, hash,
     scannedAt: new Date().toISOString(), verdict: s.verdict, findings: s.findings.length,
     parts: partsOf(skill),
-    ...(sign ? { sig: signHash(hash) } : {}),
+    ...(sign ? { sig: signHash(hash), signed: true } : {}),
   };
   writeLock(lock, lockPath);
   return { ok: true, name: key, hash, verdict: s.verdict, signed: sign, skill };
 }
 
-/** Re-derive every pinned skill and classify it against the lock. */
+/** Re-derive every pinned skill and classify it against the lock.
+ *  Fails CLOSED on a missing or corrupt lock — a present-but-empty lock stays
+ *  ok:true (legitimately nothing pinned). */
 export function verify({ lockPath = DEFAULT_LOCK } = {}) {
-  const lock = readLock(lockPath);
+  let lock;
+  try { lock = readLock(lockPath, { mustExist: true }); }
+  catch (e) { return { ok: false, error: e.message, results: [] }; }
   const results = Object.entries(lock.skills).map(([name, entry]) => verifyOne(name, entry));
   return { ok: results.every((r) => r.status === 'ok'), results };
 }
@@ -57,7 +67,10 @@ function verifyOne(name, entry) {
   if (hash !== entry.hash) return { name, status: 'drifted', source: entry.source, ...diffParts(entry.parts, partsOf(skill)) };
   const s = scanSkill(skill);
   if (s.verdict === 'flagged') return { name, status: 'poisoned', source: entry.source, findings: s.findings };
-  if (entry.sig && !verifyHashSig(hash, entry.sig)) return { name, status: 'unsigned', source: entry.source };
+  // A signature that was STRIPPED from a signed entry must still fail: trust the
+  // recorded `signed` flag, not just a present `sig`, so deleting `sig` doesn't
+  // downgrade a tamper-stamped entry to "unsigned-but-ok".
+  if ((entry.signed || entry.sig) && !verifyHashSig(hash, entry.sig)) return { name, status: 'unsigned', source: entry.source };
   return { name, status: 'ok', source: entry.source, signed: !!entry.sig };
 }
 

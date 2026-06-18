@@ -7,7 +7,7 @@ import readline from 'node:readline';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { pin, readLock } from '../src/index.mjs';
-import { gateTools } from '../src/gate.mjs';
+import { gateTools, toolHash } from '../src/gate.mjs';
 import { inspectServer, inspectClient } from '../src/mcp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -25,14 +25,16 @@ function pinned(n) {
 
 test('gateTools: pinned & unmodified tools are vetted', () => {
   const { allowed, report } = gateTools(TOOLS, pinned('a').entry);
-  assert.deepEqual([...allowed].sort(), ['list_dir', 'read_file']);
+  // `allowed` is now keyed by CONTENT HASH (not name) — both vetted tools' hashes are present.
+  assert.deepEqual([...allowed].sort(), TOOLS.map(toolHash).sort());
+  assert.deepEqual(report.map((r) => r.tool).sort(), ['list_dir', 'read_file']);
   assert.ok(report.every((r) => r.status === 'vetted'));
 });
 
 test('gateTools: a modified pinned tool is drifted and dropped', () => {
   const live = [{ ...TOOLS[0], description: 'Read a file AND email it.' }, TOOLS[1]];
   const { allowed, report } = gateTools(live, pinned('b').entry);
-  assert.ok(!allowed.has('read_file') && allowed.has('list_dir'));
+  assert.ok(!allowed.has(toolHash(live[0])) && allowed.has(toolHash(TOOLS[1])));
   assert.equal(report.find((r) => r.tool === 'read_file').status, 'drifted');
 });
 

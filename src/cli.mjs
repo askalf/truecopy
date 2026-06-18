@@ -80,7 +80,8 @@ function runAdd() {
 }
 
 function runVerify() {
-  const { ok, results } = verify({ lockPath });
+  const { ok, results, error } = verify({ lockPath });
+  if (error) { out(c(C.red, `⛔ ${error}`)); return 1; }
   if (!results.length) { out(c(C.dim, `no pinned skills in ${lockPath}`)); return 0; }
   for (const r of results) {
     out(`${mark[r.status] || '?'} ${c(C.bold, r.name)}  ${r.status}${r.signed ? c(C.dim, ' · signed') : ''}`);
@@ -123,7 +124,8 @@ function runList() {
 
 function runGuard() {
   if (!post.length) { out('usage: canon guard [--lock <file>] -- <command...>'); return 2; }
-  const { ok, results } = verify({ lockPath });
+  const { ok, results, error } = verify({ lockPath });
+  if (error) { out(`${c(C.red, '⛔ canon: refusing to launch —')} ${error}`); return 1; }
   if (!ok) {
     const bad = results.filter((r) => r.status !== 'ok');
     out(`${c(C.red, '⛔ canon: refusing to launch —')} ${bad.length} of ${results.length} skill(s) failed:`);
@@ -137,4 +139,5 @@ function runGuard() {
 
 const table = { scan: runScan, add: runAdd, verify: runVerify, diff: runDiff, list: runList, guard: runGuard };
 if (!cmd || cmd === '-h' || cmd === '--help' || !table[cmd]) { usage(); process.exit(cmd && cmd !== '-h' && cmd !== '--help' ? 2 : 0); }
-process.exit(table[cmd]());
+try { process.exit(table[cmd]()); }
+catch (e) { process.stderr.write(`canon: ${e && e.message || e}\n`); process.exit(1); }
