@@ -10,8 +10,33 @@ import { sha256, canonicalJson } from './hash.mjs';
 
 // Scan everything that ISN'T known-binary, rather than an allowlist of "text"
 // extensions — a poisoned prompt hides just as well in a `.bin`/`.dat`/`.mdx`
-// file, a Dockerfile, a Makefile, or an extension-less script.
-const BINARY_EXT = /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|pdf|zip|gz|tgz|bz2|xz|7z|rar|woff2?|ttf|otf|eot|mp[34]|wav|ogg|webm|mov|avi|mkv|flac|wasm|so|dylib|dll|exe|class|jar|o|a|node|pyc|pyd)$/i;
+// file, a Dockerfile, a Makefile, or an extension-less script. Executable code
+// formats (wasm/so/dll/exe/…) are NOT on this skip-list: they're loaded+run, can
+// carry readable injection/exfil strings, and an attacker will pick exactly the
+// extension the scanner ignores — so we scan their text (best-effort) too.
+const BINARY_EXT = /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|pdf|zip|gz|tgz|bz2|xz|7z|rar|woff2?|ttf|otf|eot|mp[34]|wav|ogg|webm|mov|avi|mkv|flac)$/i;
+
+// Decode a file to text for SCANNING (not hashing — hashing always uses raw
+// bytes). Handles UTF-16 LE/BE by BOM, so an injection encoded as UTF-16 in a
+// .md/.txt can't slip past a naive utf8 read (which would mangle it to U+FFFD).
+function decodeForScan(buf) {
+  // swap16() needs an even-length buffer AND mutates in place — so copy + trim to
+  // even first. And never let a decode edge case throw: a scanner that crashes on
+  // a crafted file is itself a bypass (the scan is skipped / errors out).
+  const swap16 = (b) => Buffer.from(b.length % 2 ? b.subarray(0, b.length - 1) : b).swap16();
+  try {
+    if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString('utf16le');
+    if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return swap16(buf).toString('utf16le');
+    // Heuristic: lots of NUL bytes among ASCII ⇒ likely UTF-16 without a BOM.
+    let nul = 0; const cap = Math.min(buf.length, 4096);
+    for (let i = 0; i < cap; i++) if (buf[i] === 0) nul++;
+    if (cap > 0 && nul / cap > 0.2) {
+      const le = (buf.length >= 2 && buf[1] === 0) ? buf : swap16(buf);
+      return le.toString('utf16le');
+    }
+    return buf.toString('utf8');
+  } catch { return buf.toString('latin1'); } // byte-preserving best-effort; never throw
+}
 // node_modules is bundled runtime code that actually loads — it must be hashed
 // AND scanned; only VCS/canon metadata is outside the trust boundary.
 const SKIP_DIR = /(^|[\\/])(\.git|\.canon)([\\/]|$)/;
@@ -40,7 +65,7 @@ export function loadSkill(source) {
     // attacker will pick whatever extension the scanner ignores
     const scanText = files
       .filter((f) => !BINARY_EXT.test(f))
-      .map((f) => fs.readFileSync(f, 'utf8'))
+      .map((f) => decodeForScan(fs.readFileSync(f)))
       .join('\n');
     return {
       source, kind: 'skill', name: path.basename(source.replace(/[\\/]$/, '')),

@@ -17,25 +17,43 @@ export function inspectClient(line, state) {
   let msg;
   try { msg = JSON.parse(line); } catch { return { forward: line }; }
   if (msg && msg.method && msg.id != null) state.pending[msg.id] = msg.method;
-  if (msg && msg.method === 'tools/call' && state.blocked.has(msg.params?.name)) return { reply: blockReply(msg.id, msg.params?.name) };
+  // Fail CLOSED on calls: a tool is callable only if it was VETTED in a gated
+  // tools/list. `blocked` alone is insufficient — a tool that was never gated
+  // (smuggled past tools/list, or known to the agent out-of-band) would otherwise
+  // be forwarded and executed. Only allow once we've actually seen+vetted a list.
+  if (msg && msg.method === 'tools/call') {
+    const name = msg.params?.name;
+    if (state.listed && !state.allowedNames.has(name)) return { reply: blockReply(msg.id, name) };
+    if (state.blocked.has(name)) return { reply: blockReply(msg.id, name) };
+  }
   return { forward: line };
 }
 
-/** server → client. Rewrites a tools/list response down to the vetted tools. */
+/** server → client. Rewrites ANY result carrying a tools array down to the vetted
+ *  set — not only one correlated to a tracked tools/list id. A hostile server can
+ *  push an UNSOLICITED tools result, answer tools/list TWICE (the 2nd after the id
+ *  is cleared), or bury tools in another reply; all must be gated, never forwarded
+ *  raw. */
 export function inspectServer(line, state, opts = {}) {
   let msg;
   try { msg = JSON.parse(line); } catch { return { forward: line }; }
-  const method = msg && msg.id != null ? state.pending[msg.id] : undefined;
-  if (method === 'tools/list' && msg.result && Array.isArray(msg.result.tools)) {
-    delete state.pending[msg.id];
+  const isToolsResult = msg && msg.result && Array.isArray(msg.result.tools);
+  if (isToolsResult) {
+    if (msg.id != null) delete state.pending[msg.id];
     const { allowed, report } = gateTools(msg.result.tools, opts.entry);
     const blockAll = opts.strict && report.some((r) => r.status !== 'vetted'); // strict: any problem → block the whole server
     for (const r of report) if (r.status !== 'vetted') { state.blocked.add(r.tool); opts.onWarn?.(`${blockAll ? 'strict — blocking all (' : 'dropped '}${r.tool} (${r.status})${blockAll ? ')' : ''}`); }
     const keep = blockAll ? new Set() : allowed;   // allowed is now a Set of hashes
-    msg.result.tools = msg.result.tools.filter((t) => t && typeof t === 'object' && keep.has(toolHash(t)));
+    const kept = msg.result.tools.filter((t) => t && typeof t === 'object' && keep.has(toolHash(t)));
+    msg.result.tools = kept;
+    // Remember the vetted names so a later tools/call can be allow-listed (fail
+    // closed). `listed` flips the call gate from blocklist to allowlist.
+    state.listed = true;
+    state.allowedNames = state.allowedNames || new Set();
+    for (const t of kept) state.allowedNames.add(t.name);
     return { forward: JSON.stringify(msg) };
   }
-  if (method && msg.id != null) delete state.pending[msg.id];
+  if (msg && msg.id != null) delete state.pending[msg.id];
   return { forward: line };
 }
 
@@ -52,7 +70,7 @@ export function runGate({ command, args = [], lockPath = 'canon.lock', name = nu
   const entry = pickEntry(readLock(lockPath), name);
   if (!entry) warn(`no pinned ${name ? '"' + name + '" ' : ''}MCP entry in ${lockPath} — every tool will be treated as unvetted (canon add it first)`);
   const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'inherit'] });
-  const state = { pending: {}, blocked: new Set() };
+  const state = { pending: {}, blocked: new Set(), allowedNames: new Set(), listed: false };
   const opts = { entry, strict, onWarn: warn };
 
   readline.createInterface({ input: process.stdin }).on('line', (line) => {
