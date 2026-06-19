@@ -50,6 +50,8 @@ canon-mcp --lock canon.lock --name filesystem -- npx -y @modelcontextprotocol/se
 
 A silently-added, drifted, or poisoned tool is stripped from `tools/list` (the agent never sees it); a call to one comes back as a normal tool error. `--strict` blocks the *entire* server if anything is off, instead of stripping the bad tools.
 
+> **Windows / Git Bash:** MSYS auto-rewrites an argument that looks like a Unix absolute path before `canon` (a native node process) sees it — a bare `--lock /etc/canon.lock`, a scan source like `/srv/skill.json`, or the wrapped server's `/workspace` path can arrive mangled (e.g. prefixed with `C:/Program Files/Git/…`), so the lock isn't found or the wrong path is scanned. Prefix the run with `MSYS_NO_PATHCONV=1` and use drive-letter paths (`C:/…`), or run canon from PowerShell/cmd. Not a canon bug — the arg is rewritten before canon reads it.
+
 **`canon guard`** — a launch gate. Verify the lock, then run a command only if it's clean:
 
 ```bash
