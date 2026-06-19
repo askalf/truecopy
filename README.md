@@ -93,8 +93,10 @@ Trust comes from three sources, unioned: your own machine's key (implicit, so a 
 
 ## In CI
 
+> Not yet on npm — installs straight from GitHub.
+
 ```yaml
-- run: npx @askalf/canon verify   # fails the build if any pinned skill drifted or turned poisonous
+- run: npx -y github:askalf/canon verify   # fails the build if any pinned skill drifted or turned poisonous
 ```
 
 ## Library
