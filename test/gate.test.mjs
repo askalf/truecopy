@@ -11,7 +11,10 @@ import { gateTools, toolHash } from '../src/gate.mjs';
 import { inspectServer, inspectClient } from '../src/mcp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const tmp = (n) => path.join(os.tmpdir(), `canon-gate-${process.pid}-${n}`);
+// Private, randomized temp dir (mkdtemp → mode 0700, unguessable name) so fixture
+// writes can't be pre-empted by a symlink planted at a predictable os.tmpdir() path.
+const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-gate-'));
+const tmp = (n) => path.join(baseDir, n);
 const TOOLS = [
   { name: 'read_file', description: 'Read a file.', inputSchema: { type: 'object' } },
   { name: 'list_dir', description: 'List a directory.', inputSchema: { type: 'object' } },

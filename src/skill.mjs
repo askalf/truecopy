@@ -51,30 +51,38 @@ function walk(dir, out = []) {
   return out;
 }
 
-export function loadSkill(source) {
-  if (!fs.existsSync(source)) throw new Error(`no such skill source: ${source}`);
-  const st = fs.statSync(source);
+function loadSkillDir(source) {
+  const files = walk(source).sort();
+  const entries = files.map((f) => ({
+    path: path.relative(source, f).replace(/\\/g, '/'),
+    hash: sha256(fs.readFileSync(f)),
+  }));
+  // scan every non-binary file — that's where poisoned prompts hide, and an
+  // attacker will pick whatever extension the scanner ignores
+  const scanText = files
+    .filter((f) => !BINARY_EXT.test(f))
+    .map((f) => decodeForScan(fs.readFileSync(f)))
+    .join('\n');
+  return {
+    source, kind: 'skill', name: path.basename(source.replace(/[\\/]$/, '')),
+    files: entries, hashInput: canonicalJson(entries),
+    scanTargets: [{ name: path.basename(source), description: scanText }],
+  };
+}
 
-  if (st.isDirectory()) {
-    const files = walk(source).sort();
-    const entries = files.map((f) => ({
-      path: path.relative(source, f).replace(/\\/g, '/'),
-      hash: sha256(fs.readFileSync(f)),
-    }));
-    // scan every non-binary file — that's where poisoned prompts hide, and an
-    // attacker will pick whatever extension the scanner ignores
-    const scanText = files
-      .filter((f) => !BINARY_EXT.test(f))
-      .map((f) => decodeForScan(fs.readFileSync(f)))
-      .join('\n');
-    return {
-      source, kind: 'skill', name: path.basename(source.replace(/[\\/]$/, '')),
-      files: entries, hashInput: canonicalJson(entries),
-      scanTargets: [{ name: path.basename(source), description: scanText }],
-    };
+export function loadSkill(source) {
+  // Read first and branch on the error, rather than stat()-then-read(): a separate
+  // existence/stat check re-resolves the path, leaving a TOCTOU window in which the
+  // source could be swapped (e.g. a symlink) between the check and the read. A
+  // directory surfaces as EISDIR; a missing source as ENOENT.
+  let raw;
+  try { raw = fs.readFileSync(source, 'utf8'); }
+  catch (e) {
+    if (e && e.code === 'EISDIR') return loadSkillDir(source);
+    if (e && e.code === 'ENOENT') throw new Error(`no such skill source: ${source}`);
+    throw e;
   }
 
-  const raw = fs.readFileSync(source, 'utf8');
   if (/\.json$/i.test(source)) {
     let j = null;
     try { j = JSON.parse(raw); } catch {}

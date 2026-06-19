@@ -19,8 +19,11 @@ for (const src of [clean, poisoned]) {
 }
 
 line('\n── canon pin + verify — catching a silent supply-chain update ──');
-const lock = path.join(os.tmpdir(), 'canon-demo.lock');
-const watched = path.join(os.tmpdir(), 'canon-demo-mcp.json');
+// Private, randomized temp dir (mkdtemp → mode 0700, unguessable name) so these
+// fixtures can't be pre-empted by a symlink planted at a predictable tmpdir path.
+const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-demo-'));
+const lock = path.join(baseDir, 'canon-demo.lock');
+const watched = path.join(baseDir, 'canon-demo-mcp.json');
 fs.copyFileSync(clean, watched);
 
 line(`\n  pin a vetted server …`);
@@ -39,4 +42,4 @@ const v = verify({ lockPath: lock });
 for (const r of v.results) line(`    ${r.status === 'ok' ? '✓' : '⚠'} ${r.name}: ${r.status}${r.changed ? '  (~' + r.changed.join(' ~') + ')' : ''}`);
 line(`\n  → canon caught the drift before the changed tool ever ran.  ${v.ok ? '' : '(exit 1 — fails your CI)'}`);
 
-try { fs.unlinkSync(lock); fs.unlinkSync(watched); } catch {}
+try { fs.rmSync(baseDir, { recursive: true, force: true }); } catch {}

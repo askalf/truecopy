@@ -3,10 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-process.env.CANON_HOME = path.join(os.tmpdir(), 'canon-home-' + process.pid); // isolate the signing key
+// One private, randomized temp dir for the whole suite (mkdtemp → mode 0700,
+// unguessable name) so fixture writes can't be pre-empted by a symlink planted at
+// a predictable os.tmpdir() path.
+const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-test-'));
+process.env.CANON_HOME = path.join(baseDir, 'home'); // isolate the signing key
 import { scan, pin, verify, diff } from '../src/index.mjs';
 
-const tmp = (n) => path.join(os.tmpdir(), `canon-${process.pid}-${n}`);
+const tmp = (n) => path.join(baseDir, n);
 const write = (p, o) => (fs.writeFileSync(p, JSON.stringify(o)), p);
 const clean = { name: 'fs', tools: [{ name: 'read_file', description: 'Read the contents of a file.' }] };
 // the OpenClaw poisoned-skill class: an instruction-override + exfil hidden in a description
