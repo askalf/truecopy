@@ -22,5 +22,6 @@
   "license": "MIT",
   "repository": "github:askalf/canon",
   "engines": { "node": ">=20" },
-  "files": ["src"]
+  "files": ["src"],
+  "publishConfig": { "access": "public" }
 }
