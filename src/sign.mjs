@@ -8,7 +8,9 @@
 // The PRIVATE key is held in the OS keychain (keychain.mjs) — never written as
 // plaintext — when one is available; only the PUBLIC key lives in signing-key.json
 // (public is not secret). Hosts with no keychain fall back to a 0600 plaintext file,
-// and a pre-keychain plaintext key is migrated into the keychain on first sign.
+// and a pre-keychain plaintext key is migrated into the keychain on first sign. In CI,
+// set CANON_SIGNING_KEY (the private key) to sign without any local key at all —
+// signing moves off developer boxes into CI, and everyone else only `verify`s.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,6 +27,24 @@ const normPem = (p) => String(p).replace(/\r\n/g, '\n').trim();
 const enc64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const dec64 = (s) => Buffer.from(s, 'base64').toString('utf8');
 
+// A signing key injected via the environment — CI mode. CANON_SIGNING_KEY holds the
+// PRIVATE key (base64-encoded PEM, or a raw PEM); the PUBLIC key is DERIVED from it,
+// so the CI secret is just the private half and signing needs no file or keychain.
+// Read-only: never writes to disk/keychain (CI runners are ephemeral). Takes priority
+// over the local key, so `canon … --sign` in CI signs with this identity. Because the
+// public key is derived, a key minted locally and exported here keeps the same keyId.
+function envKey() {
+  const raw = process.env.CANON_SIGNING_KEY;
+  if (!raw) return null;
+  try {
+    const privateKey = raw.includes('-----BEGIN') ? raw : dec64(raw);
+    const publicKey = crypto.createPublicKey(privateKey).export({ type: 'spki', format: 'pem' });
+    return { publicKey, privateKey };
+  } catch {
+    return null;                                             // malformed → fall through to the local key
+  }
+}
+
 /** A stable short fingerprint for a public key — how the trust set addresses it. */
 export function keyId(publicKey) {
   if (!publicKey) return '';
@@ -40,6 +60,8 @@ const readFile = () => { try { return JSON.parse(fs.readFileSync(keyFile(), 'utf
  *  The private half comes from the OS keychain; a legacy plaintext private in the
  *  file is honored as a fallback so existing installs keep working pre-migration. */
 export function loadKey() {
+  const env = envKey();
+  if (env) return env;                                       // CI: key from CANON_SIGNING_KEY
   const file = readFile();
   if (!file || !file.publicKey) return file;                 // no key (or unreadable)
   if (keychainAvailable()) {
@@ -51,6 +73,8 @@ export function loadKey() {
 }
 
 export function ensureKey() {
+  const env = envKey();
+  if (env) return env;                                       // CI: sign with the injected key; never generate/migrate
   const file = keyFile();
   const existing = readFile();
   if (existing && existing.publicKey) {

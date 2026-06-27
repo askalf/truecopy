@@ -95,9 +95,21 @@ Trust comes from three sources, unioned: your own machine's key (implicit, so a 
 
 > Not yet on npm — installs straight from GitHub.
 
+**Verify everywhere** — the gate. Public key only, no secret:
+
 ```yaml
 - run: npx -y github:askalf/canon verify   # fails the build if any pinned skill drifted or turned poisonous
 ```
+
+**Sign in CI, not on laptops.** Hold the private signing key as a single CI secret instead of scattering it across developer machines. Set **`CANON_SIGNING_KEY`** to the private key (a raw ed25519 PEM, or base64-encoded) — canon derives the public key from it, so signing needs no `~/.canon` file and no keychain, and the key keeps the same `keyId`:
+
+```yaml
+- run: npx -y github:askalf/canon add ./mcp-server.json --sign
+  env:
+    CANON_SIGNING_KEY: ${{ secrets.CANON_SIGNING_KEY }}
+```
+
+Mint the identity once (`openssl genpkey -algorithm ed25519`), store the private key as the `CANON_SIGNING_KEY` secret, and commit its public key to **`canon.trust`** (`canon trust add <pub.pem> --repo`). Everyone else — laptops, the fleet, the verify job above — carries only the public key, so they `verify` but never sign: one signing identity in one secret, not a private key on every box.
 
 ## Library
 
