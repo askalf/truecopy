@@ -15,13 +15,27 @@
     "demo": "node demo/demo.mjs"
   },
   "dependencies": {
-    "@askalf/warden": "github:askalf/warden"
+    "@askalf/warden": "github:askalf/warden#2aaaa0cdcb2a21b13225c002f1879998ce88c7c2"
   },
-  "keywords": ["ai-agents", "agent-security", "mcp", "supply-chain", "skills", "provenance", "own-your-stack"],
+  "keywords": [
+    "ai-agents",
+    "agent-security",
+    "mcp",
+    "supply-chain",
+    "skills",
+    "provenance",
+    "own-your-stack"
+  ],
   "author": "Thomas Sprayberry",
   "license": "MIT",
   "repository": "github:askalf/canon",
-  "engines": { "node": ">=20" },
-  "files": ["src"],
-  "publishConfig": { "access": "public" }
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }
