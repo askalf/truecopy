@@ -11,7 +11,7 @@ import { sha256, canonicalJson } from './hash.mjs';
 export { loadSkill, skillHash, scanSkill, readLock, writeLock, DEFAULT_LOCK };
 export { signHash, verifyHashSig, keyId, ensureKey };
 export { loadTrust, trustedSigner, trustKey, untrustKey, listTrust };
-export { claudeSkillRoots, discoverClaudeSkills, resolveClaudeSkill } from './claude.mjs';
+export { claudeSkillRoots, discoverClaudeSkills, discoverClaudePluginSkills, resolveClaudeSkill } from './claude.mjs';
 
 // A per-part hash map (files of a skill dir, or tools of an MCP server), so a
 // drift can be explained as added / removed / changed parts — not just "the hash moved".
@@ -71,7 +71,12 @@ function verifyOne(name, entry, trust) {
   const hash = skillHash(skill);
   if (hash !== entry.hash) return { name, status: 'drifted', source: entry.source, ...diffParts(entry.parts, partsOf(skill)) };
   const s = scanSkill(skill);
-  if (s.verdict === 'flagged') return { name, status: 'poisoned', source: entry.source, findings: s.findings };
+  // A `--force` pin recorded verdict:'flagged' — the human read these exact bytes
+  // and accepted the findings, so an UNCHANGED artifact doesn't re-fail on them.
+  // A skill pinned CLEAN that now scans flagged (same bytes, newer detection) still
+  // fails: nobody accepted those findings.
+  const accepted = s.verdict === 'flagged' && entry.verdict === 'flagged';
+  if (s.verdict === 'flagged' && !accepted) return { name, status: 'poisoned', source: entry.source, findings: s.findings };
   if (entry.signed || entry.sig) {
     // A signature that was STRIPPED or forged-against-a-different-hash fails the
     // crypto check → `unsigned` (trust the recorded `signed` flag, not just a
@@ -82,9 +87,9 @@ function verifyOne(name, entry, trust) {
     // `untrusted` (fails closed), not silently accepted.
     const signer = trustedSigner(entry.sig.pub, trust);
     if (!signer) return { name, status: 'untrusted', source: entry.source, keyId: keyId(entry.sig.pub) };
-    return { name, status: 'ok', source: entry.source, signed: true, signer };
+    return { name, status: 'ok', source: entry.source, signed: true, signer, ...(accepted ? { accepted: true } : {}) };
   }
-  return { name, status: 'ok', source: entry.source, signed: false };
+  return { name, status: 'ok', source: entry.source, signed: false, ...(accepted ? { accepted: true } : {}) };
 }
 
 /** What changed in a source since it was pinned. */

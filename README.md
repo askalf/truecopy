@@ -22,7 +22,8 @@ canon verify                          # re-check every pinned skill for drift / 
 canon diff ./mcp-server.json          # what changed since you pinned it
 canon list                            # the pinned set
 canon guard -- npm start              # verify the lock, then launch only if it's clean
-canon add --claude --sign             # pin every Claude Code skill (.claude/skills) — then gate them with `canon hook claude`
+canon add --claude --claude-plugins --sign   # pin every Claude Code skill — project, user, and marketplace-plugin scope
+canon hook install                    # …and wire the invocation-time gate into .claude/settings.json
 ```
 
 ```text
@@ -63,27 +64,30 @@ So canon spans the whole lifecycle: **scan → pin → verify (CI) → enforce (
 
 ## Gate Claude Code skills
 
-Claude Code loads **skills** — instruction directories under `.claude/skills/` (project scope) and `~/.claude/skills/` (user scope) — and marketplaces now distribute them. That is exactly the surface canon exists for: a skill is prose that steers an agent holding your privileges, and a silent update to one shows up in no diff you'll ever read.
+Claude Code loads **skills** — instruction directories under `.claude/skills/` (project scope), `~/.claude/skills/` (user scope), and, namespaced as `plugin:skill`, from **marketplace plugins** under `~/.claude/plugins/marketplaces/`. That is exactly the surface canon exists for: a skill is prose that steers an agent holding your privileges, and a silent update to one shows up in no diff you'll ever read.
 
 Pin everything Claude Code can see, then gate every invocation:
 
 ```bash
-canon add --claude --sign     # vet + pin every visible skill (a project skill shadows a same-named user skill, like Claude Code itself)
-canon scan --claude           # or just scan them
+canon add --claude --sign            # vet + pin every project/user skill (a project skill shadows a same-named user skill, like Claude Code itself)
+canon add --claude-plugins --sign    # …and every skill shipped by installed marketplace plugins, under its `plugin:skill` name
+canon hook install                   # wire the gate into this repo's .claude/settings.json (idempotent; --user for ~/.claude)
 ```
 
-Wire the hook into `.claude/settings.json`, and the **exact directory about to run** is re-checked at the moment the skill is invoked — a drifted or poisoned skill is blocked (exit 2), with the reason fed back to the model:
+`hook install` writes one canon-owned `PreToolUse` entry (and never touches your other hooks — it refuses an unparseable settings file rather than clobber it):
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
       { "matcher": "Skill",
-        "hooks": [{ "type": "command", "command": "npx -y github:askalf/canon hook claude" }] }
+        "hooks": [{ "type": "command", "command": "npx -y github:askalf/canon hook claude", "timeout": 10 }] }
     ]
   }
 }
 ```
+
+From then on the **exact directory about to run** — project, user, or marketplace-plugin — is re-checked at the moment the skill is invoked; a drifted or poisoned skill is blocked (exit 2), with the reason fed back to the model. This composes with Claude Code's own plugin blocklist rather than duplicating it: the blocklist is name-based and centrally pushed, canon pins the *content you vetted*.
 
 Two policies. The default protects the **pinned** set — unpinned skills pass, so adoption never breaks a session. `--strict` turns `canon.lock` into a whitelist that fails **closed** — including on a crashed hook, so the gate itself can't become the bypass:
 
@@ -91,14 +95,17 @@ Two policies. The default protects the **pinned** set — unpinned skills pass, 
 |---|---|---|
 | pinned, unchanged | runs | runs |
 | pinned, **modified since pin** | **blocked** | **blocked** |
-| pinned, **scans poisoned** — even with a matching hash (detection rules improve after you pin) | **blocked** | **blocked** |
+| pinned clean, **now scans poisoned** — same bytes, newer detection | **blocked** | **blocked** |
+| pinned with `--force` (findings **accepted** for those exact bytes), unchanged | runs | runs |
 | pinned, directory missing · corrupt lock | **blocked** | **blocked** |
-| not pinned (incl. an unresolvable `plugin:skill`) | runs | **blocked** |
+| not pinned · a name canon can't resolve to a directory | runs | **blocked** |
 | no lock · hook crash | runs | **blocked** |
+
+A `--force` pin is an explicit accept: you read those bytes, canon records `verdict: "flagged"`, and `verify` / the hook / `canon-mcp` all honor it *for exactly that content* (shown as `· accepted findings`). Any change to the bytes, or the same flags appearing on something you pinned as clean, blocks as before. This matters in practice: scanners flag instructional prose that legitimately discusses credentials — accept it once, deliberately, instead of teaching yourself to bypass the gate.
 
 Every row above is verified **live**, not just unit-tested: each scenario ran in its own fresh headless Claude Code session against a real pinned skill. A skill silently edited after pinning physically cannot run — the invocation fails and the model is told why ("drifted from its pinned version") — and restoring the exact pinned bytes immediately un-blocks it. The check costs roughly a quarter-second per skill invocation.
 
-**Per-repo lockdown:** hook settings merge from the project too, so committing the `--strict` variant in the repo's own `.claude/settings.json` next to `canon.lock` makes *that repo* whitelist-strict for everyone who works in it, while machines keep the adoption-friendly default globally. And the same committed `canon.lock` gates CI (`canon verify`), `canon-mcp`, and every teammate's sessions.
+**Per-repo lockdown:** hook settings merge from the project too, so `canon hook install --strict` in a repo (committed next to `canon.lock`) makes *that repo* whitelist-strict for everyone who works in it, while machines keep the adoption-friendly default globally. And the same committed `canon.lock` gates CI (`canon verify`), `canon-mcp`, and every teammate's sessions.
 
 ## What you can pin
 

@@ -27,10 +27,16 @@ export function gateTools(tools = [], entry = null) {
   // reason `parts` is probed with Object.hasOwn, not `in`, which walks the chain.)
   const nameCounts = Object.create(null);
   for (const t of tools) nameCounts[t.name] = (nameCounts[t.name] || 0) + 1;
+  // A --force pin recorded verdict:'flagged' — the human accepted the findings for
+  // exactly the pinned bytes, so a flagged tool whose hash still matches its pinned
+  // part isn't re-blocked. Everything else flagged (unpinned, drifted, or pinned
+  // clean and re-flagged by newer detection) is never served.
+  const acceptedFinding = (t, h) =>
+    entry && entry.verdict === 'flagged' && nameCounts[t.name] === 1 && Object.hasOwn(parts, t.name) && parts[t.name] === h;
   const report = tools.map((t) => {
     const h = toolHash(t);
     const status =
-      poisoned.has(t.name) ? 'poisoned'        // injection/exfil in name/desc/schema — never serve
+      poisoned.has(t.name) && !acceptedFinding(t, h) ? 'poisoned' // injection/exfil in name/desc/schema — never serve
         : !entry ? 'unpinned'                  // this server isn't in the lock at all
           : nameCounts[t.name] > 1 ? 'drifted' // duplicate name → not trustworthy by name
             : !Object.hasOwn(parts, t.name) ? 'unvetted'  // a tool you never pinned (e.g. silently added)

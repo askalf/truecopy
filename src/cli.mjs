@@ -3,9 +3,10 @@
 // Exit code is a CI gate: 0 = all clean, 1 = anything flagged / drifted / poisoned.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { scan, pin, verify, diff, readLock, ensureKey, keyId, trustKey, untrustKey, listTrust, loadSkill, skillHash, scanSkill } from './index.mjs';
-import { discoverClaudeSkills, resolveClaudeSkill } from './claude.mjs';
+import { discoverClaudeSkills, discoverClaudePluginSkills, resolveClaudeSkill } from './claude.mjs';
 
 const argv = process.argv.slice(2);
 const sep = argv.indexOf('--');
@@ -18,7 +19,7 @@ const opt = (name, def) => {
   const eq = pre.find((x) => x.startsWith(name + '='));
   return eq ? eq.slice(name.length + 1) : def;
 };
-const VALUE_FLAGS = new Set(['--lock', '--name', '--trust']); // consume the next token as a value
+const VALUE_FLAGS = new Set(['--lock', '--name', '--trust', '--settings', '--command']); // consume the next token as a value
 const sources = (() => {
   const out = [];
   for (let i = 1; i < pre.length; i++) {
@@ -32,13 +33,20 @@ const lockPath = opt('--lock', 'canon.lock');
 const optTrust = () => { const t = opt('--trust', undefined); return typeof t === 'string' ? t : undefined; };
 
 // `--claude` expands to every Claude Code skill visible from here (.claude/skills,
-// project + user scope). Project-relative paths go into the lock with forward
-// slashes so a committed canon.lock verifies on any OS / in CI.
-const claudeSources = () => discoverClaudeSkills().map(({ dir }) => {
+// project + user scope); `--claude-plugins` adds every skill shipped by installed
+// marketplace plugins, pinned under the `plugin:skill` name Claude Code invokes it
+// by (the dir basename alone would collide — discord:access vs telegram:access).
+// Project-relative paths go into the lock with forward slashes so a committed
+// canon.lock verifies on any OS / in CI.
+const portable = (dir) => {
   const rel = path.relative(process.cwd(), dir);
   return (rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : dir).replace(/\\/g, '/');
-});
-const allSources = () => (opt('--claude', false) ? [...sources, ...claudeSources()] : sources);
+};
+const allSources = () => [
+  ...sources.map((src) => ({ src })),
+  ...(opt('--claude', false) ? discoverClaudeSkills().map(({ dir }) => ({ src: portable(dir) })) : []),
+  ...(opt('--claude-plugins', false) ? discoverClaudePluginSkills().map(({ name, dir }) => ({ src: portable(dir), name })) : []),
+];
 
 const tty = process.stdout.isTTY;
 const C = { red: '\x1b[31m', grn: '\x1b[32m', yel: '\x1b[33m', dim: '\x1b[2m', bold: '\x1b[1m', rst: '\x1b[0m' };
@@ -54,6 +62,8 @@ function usage() {
   canon add  <source...> [--sign]   vet + pin into ${lockPath} (refuses poisoned unless --force)
   canon scan --claude               poison-scan every Claude Code skill (.claude/skills, project + user)
   canon add  --claude [--sign]      vet + pin them all
+  canon scan --claude-plugins       …and every skill shipped by installed marketplace plugins
+  canon add  --claude-plugins       vet + pin those under their \`plugin:skill\` invocation name
   canon verify [--lock <file>] [--trust <file>]   re-check every pinned skill for drift / poisoning
   canon diff <source> [--name <n>]  show what changed since it was pinned
   canon list                        show the pinned set
@@ -67,6 +77,9 @@ function usage() {
   canon hook claude [--strict]      Claude Code PreToolUse hook: block a pinned skill that
                                     drifted or turned poisonous at the moment it's invoked
                                     (--strict: only pinned skills may run at all)
+  canon hook install [--strict] [--user] [--settings <file>]
+                                    wire that hook into .claude/settings.json (idempotent;
+                                    project file by default, --user for ~/.claude)
 
   canon-mcp [--lock] [--name] [--strict] -- <mcp-server cmd...>
                                     enforce the lock on a LIVE MCP server: only vetted,
@@ -79,13 +92,13 @@ function runScan() {
   const list = allSources();
   if (!list.length) return (usage(), 2);
   let bad = 0;
-  for (const s of list) {
+  for (const { src, name } of list) {
     try {
-      const r = scan(s);
-      out(`${mark[r.verdict]} ${c(C.bold, r.skill.name)} ${c(C.dim, `(${r.skill.kind})`)}  ${r.verdict}`);
+      const r = scan(src);
+      out(`${mark[r.verdict]} ${c(C.bold, name || r.skill.name)} ${c(C.dim, `(${r.skill.kind})`)}  ${r.verdict}`);
       r.findings.forEach((f) => out(findingLine(f)));
       if (r.verdict !== 'clean') bad++;
-    } catch (e) { out(`${c(C.red, '✗')} ${s}: ${e.message}`); bad++; }
+    } catch (e) { out(`${c(C.red, '✗')} ${src}: ${e.message}`); bad++; }
   }
   return bad ? 1 : 0;
 }
@@ -95,12 +108,12 @@ function runAdd() {
   if (!list.length) return (usage(), 2);
   const sign = opt('--sign', false), force = opt('--force', false);
   let bad = 0;
-  for (const s of list) {
+  for (const { src, name } of list) {
     try {
-      const r = pin(s, { lockPath, sign: !!sign, force: !!force, name: opt('--name', undefined) });
+      const r = pin(src, { lockPath, sign: !!sign, force: !!force, name: name || opt('--name', undefined) });
       if (r.ok) out(`${mark.ok} pinned ${c(C.bold, r.name)} ${c(C.dim, r.hash.slice(0, 12))}${r.signed ? c(C.dim, ' · signed') : ''}`);
-      else { out(`${mark.flagged} refused ${c(C.bold, s)} — poisoned (use --force to override):`); r.findings.forEach((f) => out(findingLine(f))); bad++; }
-    } catch (e) { out(`${c(C.red, '✗')} ${s}: ${e.message}`); bad++; }
+      else { out(`${mark.flagged} refused ${c(C.bold, name || src)} — poisoned (use --force to override):`); r.findings.forEach((f) => out(findingLine(f))); bad++; }
+    } catch (e) { out(`${c(C.red, '✗')} ${src}: ${e.message}`); bad++; }
   }
   return bad ? 1 : 0;
 }
@@ -111,7 +124,8 @@ function runVerify() {
   if (!results.length) { out(c(C.dim, `no pinned skills in ${lockPath}`)); return 0; }
   for (const r of results) {
     const sig = r.signer ? c(C.dim, ` · signed by ${r.signer}`) : (r.signed ? c(C.dim, ' · signed') : '');
-    out(`${mark[r.status] || '?'} ${c(C.bold, r.name)}  ${r.status}${sig}`);
+    const acc = r.accepted ? c(C.yel, ' · accepted findings (--force pin)') : '';
+    out(`${mark[r.status] || '?'} ${c(C.bold, r.name)}  ${r.status}${sig}${acc}`);
     if (r.status === 'drifted') out(c(C.dim, `      ${summary(r)}`));
     if (r.status === 'untrusted') out(c(C.dim, `      key ${r.keyId} not trusted — canon trust add <pubkey> --name <publisher>`));
     if (r.status === 'poisoned') r.findings.forEach((f) => out(findingLine(f)));
@@ -252,16 +266,61 @@ function runHookClaude() {
     const skill = loadSkill(dir);
     if (skillHash(skill) !== entry.hash) return deny(`skill '${name}' DRIFTED since it was pinned — review with: canon diff ${dir.replace(/\\/g, '/')}`);
     const s = scanSkill(skill);
-    if (s.verdict === 'flagged') return deny(`skill '${name}' is POISONED: ${s.findings.map((f) => `${f.tool}: ${f.flags.join('; ')}`).join(' · ')}`);
+    // findings the human accepted with a --force pin (verdict:'flagged' in the
+    // lock) don't re-block the same bytes; flagged-but-pinned-clean still does
+    if (s.verdict === 'flagged' && entry.verdict !== 'flagged') return deny(`skill '${name}' is POISONED: ${s.findings.map((f) => `${f.tool}: ${f.flags.join('; ')}`).join(' · ')}`);
     return 0;
   } catch (e) {
     return strict ? deny(`hook error — ${e && e.message || e}`) : 0;
   }
 }
 
+// `canon hook install` — wire the gate into Claude Code settings without hand-
+// editing JSON. Manages exactly ONE canon-owned PreToolUse entry (recognized by
+// its command containing `hook claude`), updating it in place on re-runs; every
+// other hook is left untouched. An unparseable settings file is REFUSED, never
+// clobbered — a config gate must not destroy config.
+function runHookInstall() {
+  const strict = !!opt('--strict', false);
+  const explicit = opt('--settings', undefined);
+  const target = typeof explicit === 'string' ? explicit
+    : (opt('--user', false) ? path.join(os.homedir(), '.claude', 'settings.json') : path.join('.claude', 'settings.json'));
+  const cmdOverride = opt('--command', undefined);
+  const command = typeof cmdOverride === 'string' ? cmdOverride
+    : `npx -y github:askalf/canon hook claude${strict ? ' --strict' : ''}`;
+
+  let settings = {};
+  try { settings = JSON.parse(fs.readFileSync(target, 'utf8')); }
+  catch (e) {
+    if (!e || e.code !== 'ENOENT') { out(`${c(C.red, '✗')} ${target} exists but can't be used: ${e.message} — fix it, or point --settings elsewhere`); return 1; }
+  }
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) { out(`${c(C.red, '✗')} ${target} is not a settings object — refusing to rewrite it`); return 1; }
+  if (settings.hooks !== undefined && (typeof settings.hooks !== 'object' || Array.isArray(settings.hooks) || settings.hooks === null)) { out(`${c(C.red, '✗')} ${target} has a non-object "hooks" — refusing to rewrite it`); return 1; }
+  settings.hooks = settings.hooks || {};
+  if (settings.hooks.PreToolUse !== undefined && !Array.isArray(settings.hooks.PreToolUse)) { out(`${c(C.red, '✗')} ${target} has a non-array hooks.PreToolUse — refusing to rewrite it`); return 1; }
+  const pre = settings.hooks.PreToolUse || (settings.hooks.PreToolUse = []);
+
+  const ours = (h) => h && Array.isArray(h.hooks) && h.hooks.some((x) => x && typeof x.command === 'string' && x.command.includes('hook claude'));
+  const entry = { matcher: 'Skill', hooks: [{ type: 'command', command, timeout: 10 }] };
+  const i = pre.findIndex(ours);
+  const action = i >= 0 ? 'updated' : 'installed';
+  if (i >= 0) pre[i] = entry; else pre.push(entry);
+
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, JSON.stringify(settings, null, 2) + '\n');
+  out(`${mark.ok} ${action} the canon Skill gate in ${target}${strict ? ` ${c(C.yel, '(strict)')}` : ''}`);
+  out(c(C.dim, `   command: ${command}`));
+  out(c(C.dim, '   already-running Claude Code sessions snapshot hooks at start — restart them to pick this up'));
+  if (typeof explicit !== 'string' && !opt('--user', false)) out(c(C.dim, `   commit ${target} together with ${lockPath} and this repo's gate travels with it`));
+  return 0;
+}
+
 function runHook() {
-  if ((sources[0] || '') !== 'claude') { out('usage: canon hook claude [--lock <file>] [--strict]   (Claude Code PreToolUse, matcher: Skill)'); return 2; }
-  return runHookClaude();
+  const sub = sources[0] || '';
+  if (sub === 'claude') return runHookClaude();
+  if (sub === 'install') return runHookInstall();
+  out('usage: canon hook claude [--lock <file>] [--strict]   ·   canon hook install [--strict] [--user] [--settings <file>] [--command <cmd>]');
+  return 2;
 }
 
 const table = { scan: runScan, add: runAdd, verify: runVerify, diff: runDiff, list: runList, guard: runGuard, key: runKey, trust: runTrust, hook: runHook };

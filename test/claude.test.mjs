@@ -70,9 +70,15 @@ test('hook: pinned + unchanged allows; drift after pin blocks with exit 2', () =
   fs.writeFileSync(path.join(goodDir, 'SKILL.md'), '# good\nSummarize the diff politely.\n'); // restore for later tests
 });
 
-test('hook: a pinned skill that scans poisoned is blocked even with a matching hash', () => {
+test('hook: findings accepted with --force pin run; the same flags on a clean-pinned skill block', () => {
   const lock = path.join(baseDir, 'h3.lock');
-  assert.equal(pin(evilDir, { lockPath: lock, force: true }).ok, true); // hash matches poisoned content
+  assert.equal(pin(evilDir, { lockPath: lock, force: true }).ok, true); // human read the bytes, accepted the findings
+  assert.equal(hook(skillCall('evil'), { lock }).status, 0);
+  // same bytes, but the lock says it was pinned CLEAN (i.e. detection improved
+  // after the pin) — nobody accepted these findings, so the hook blocks
+  const l = JSON.parse(fs.readFileSync(lock, 'utf8'));
+  l.skills.evil.verdict = 'clean';
+  fs.writeFileSync(lock, JSON.stringify(l));
   const r = hook(skillCall('evil'), { lock });
   assert.equal(r.status, 2);
   assert.match(r.stderr, /POISONED/);

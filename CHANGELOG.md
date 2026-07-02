@@ -4,6 +4,43 @@ All notable changes to **@askalf/canon** are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-07-02
+
+### Added
+- **Marketplace plugin skills** — the `plugin:skill` namespace is now resolvable,
+  closing 0.3.0's known gap:
+  - `canon scan --claude-plugins` / `canon add --claude-plugins [--sign]` discover
+    every skill shipped by installed marketplaces
+    (`~/.claude/plugins/marketplaces/<mp>/{plugins,external_plugins}/<plugin>/skills/<skill>`),
+    pinned under the `plugin:skill` name Claude Code invokes it by (a plugin's
+    public name comes from its `.claude-plugin/plugin.json` manifest, dir name as
+    fallback; a manifest name that isn't path-safe is ignored, not trusted).
+  - `canon hook claude` resolves `plugin:skill` invocations to the exact plugin
+    directory about to run — deterministically (marketplaces in sorted order)
+    when two marketplaces carry the same plugin name. Both name parts are
+    validated; malformed or unknown forms stay unresolvable (strict blocks them).
+  - Disk is the source of truth: whether a plugin is currently *enabled* is not
+    consulted — an enable is one click away, so canon pins what *could* run.
+  - Library: `discoverClaudePluginSkills`.
+- **`canon hook install`** — wire the gate without hand-editing JSON. Writes one
+  canon-owned `PreToolUse` entry (matcher `Skill`) into `.claude/settings.json`
+  (project scope by default; `--user` for `~/.claude`; `--settings <file>` /
+  `--command <cmd>` to override). Idempotent — re-runs update the entry in place
+  (e.g. adding `--strict`) and never touch other hooks; an unparseable settings
+  file or unexpected hook shape is refused, never clobbered.
+
+### Changed
+- **A `--force` pin now actually means "findings accepted".** Previously the
+  invocation hook, `verify`, and the MCP gate re-flagged a force-pinned skill on
+  every check — the human's explicit accept was unenforceable. Now a pin recorded
+  with `verdict: "flagged"` passes for **exactly those bytes** (surfaced as
+  `· accepted findings`); any content change, or the same flags appearing on an
+  entry pinned *clean* (same bytes, newer detection), still fails. Surfaced by
+  scanning the official Claude Code marketplace, where instructional skills that
+  legitimately discuss credential handling trip the sensitive-path/secret-env
+  heuristics — the accept path makes those FPs one deliberate decision instead of
+  a standing reason to bypass the gate.
+
 ## [0.3.0] - 2026-07-02
 
 ### Added

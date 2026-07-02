@@ -52,6 +52,22 @@ test('diff: reports added / changed tools since pin', () => {
   assert.ok(d.added.includes('write_file'));
 });
 
+test('verify: a --force pin means the findings are ACCEPTED for those bytes — ok, flagged as such; a clean-pinned re-flag still fails', () => {
+  const lock = tmp('f.lock'), src = write(tmp('f.json'), poison);
+  assert.equal(pin(src, { lockPath: lock, force: true }).ok, true);
+  const v = verify({ lockPath: lock });
+  assert.equal(v.ok, true);
+  assert.equal(v.results[0].status, 'ok');
+  assert.equal(v.results[0].accepted, true);
+  // same bytes recorded as pinned CLEAN (detection improved later) → poisoned
+  const l = JSON.parse(fs.readFileSync(lock, 'utf8'));
+  l.skills.evil.verdict = 'clean';
+  fs.writeFileSync(lock, JSON.stringify(l));
+  const v2 = verify({ lockPath: lock });
+  assert.equal(v2.ok, false);
+  assert.equal(v2.results[0].status, 'poisoned');
+});
+
 test('verify: a signed entry verifies; a corrupted signature is caught', () => {
   const lock = tmp('s.lock'), src = write(tmp('s.json'), clean);
   pin(src, { lockPath: lock, sign: true });
