@@ -85,7 +85,20 @@ Wire the hook into `.claude/settings.json`, and the **exact directory about to r
 }
 ```
 
-By default the hook protects the **pinned** set — unpinned skills pass, so adoption never breaks a session. `--strict` turns `canon.lock` into a whitelist: an unpinned skill, an unresolvable `plugin:skill`, a missing lock — even a crashed hook — all fail **closed**. A corrupt lock fails closed in both modes. Commit `canon.lock`, and the same file gates CI (`canon verify`), `canon-mcp`, and every teammate's sessions.
+Two policies. The default protects the **pinned** set — unpinned skills pass, so adoption never breaks a session. `--strict` turns `canon.lock` into a whitelist that fails **closed** — including on a crashed hook, so the gate itself can't become the bypass:
+
+| skill state | default | `--strict` |
+|---|---|---|
+| pinned, unchanged | runs | runs |
+| pinned, **modified since pin** | **blocked** | **blocked** |
+| pinned, **scans poisoned** — even with a matching hash (detection rules improve after you pin) | **blocked** | **blocked** |
+| pinned, directory missing · corrupt lock | **blocked** | **blocked** |
+| not pinned (incl. an unresolvable `plugin:skill`) | runs | **blocked** |
+| no lock · hook crash | runs | **blocked** |
+
+Every row above is verified **live**, not just unit-tested: each scenario ran in its own fresh headless Claude Code session against a real pinned skill. A skill silently edited after pinning physically cannot run — the invocation fails and the model is told why ("drifted from its pinned version") — and restoring the exact pinned bytes immediately un-blocks it. The check costs roughly a quarter-second per skill invocation.
+
+**Per-repo lockdown:** hook settings merge from the project too, so committing the `--strict` variant in the repo's own `.claude/settings.json` next to `canon.lock` makes *that repo* whitelist-strict for everyone who works in it, while machines keep the adoption-friendly default globally. And the same committed `canon.lock` gates CI (`canon verify`), `canon-mcp`, and every teammate's sessions.
 
 ## What you can pin
 
