@@ -13,6 +13,15 @@ Agents install tools from places you don't control — MCP servers, skill market
 
 Deterministic and offline. canon shares **[warden](https://github.com/askalf/warden)**'s detection — so the two are a pair, not a duplicate: **canon vets the tool (provenance); warden contains the call (runtime).** *Vet it → contain it.*
 
+## Install
+
+```bash
+npm i -g github:askalf/canon          # latest
+npm i -g github:askalf/canon#v0.6.1   # pinned release
+```
+
+> Not yet on npm — installs straight from GitHub (or prefix any command below with `npx -y github:askalf/canon`).
+
 ## Quick start
 
 ```bash
