@@ -4,6 +4,19 @@ All notable changes to **@askalf/canon** are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-07-03
+
+### Changed
+- **Warden pin bumped** to `ea1bc7c`, flowing three scanner false-positive fixes
+  measured against 2,019 real marketplace skills (the official Claude Code
+  catalog + 9 community marketplaces) into canon's verdicts: `.env` no longer
+  matches `process.env`/`self.env` (code, not the dotenv file); clause-bounded
+  exfil patterns no longer span lines in stringified text; and the bare-word
+  `exfiltrate/leak/steal` finding tiers as advisory (descriptive prose — memory
+  leaks, ML data leakage, defensive threat lists), not critical. Net effect on
+  the audit corpus: from ~10% of skills first-pass-flagged down to **0.6%**, and
+  on manual review of all remaining flags, **zero were actually poisoned**.
+
 ## [0.6.0] - 2026-07-03
 
 ### Added
