@@ -45,11 +45,12 @@ export function pin(source, { lockPath = DEFAULT_LOCK, sign = false, force = fal
   lock.skills[key] = {
     source: skill.source, kind: skill.kind, hash,
     scannedAt: new Date().toISOString(), verdict: s.verdict, findings: s.findings.length,
+    ...(s.advisories?.length ? { advisories: s.advisories.length } : {}), // mentions noted at pin time, for the record
     parts: partsOf(skill),
     ...(sign ? { sig: signHash(hash), signed: true } : {}),
   };
   writeLock(lock, lockPath);
-  return { ok: true, name: key, hash, verdict: s.verdict, signed: sign, skill };
+  return { ok: true, name: key, hash, verdict: s.verdict, signed: sign, skill, advisories: s.advisories?.length || 0 };
 }
 
 /** Re-derive every pinned skill and classify it against the lock.

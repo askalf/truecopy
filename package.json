@@ -1,6 +1,6 @@
 {
   "name": "@askalf/canon",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "own your agent skills — vet, sign, and pin every skill & MCP server before it runs. The supply-chain gate for AI agents. Part of Own Your Stack.",
   "type": "module",
   "bin": {
@@ -15,7 +15,7 @@
     "demo": "node demo/demo.mjs"
   },
   "dependencies": {
-    "@askalf/warden": "github:askalf/warden#f7b2499f100bb78887953b7855a1c18269783a4c"
+    "@askalf/warden": "github:askalf/warden#866a1f91e3661248bac860446c44869b885b5d6c"
   },
   "keywords": [
     "ai-agents",

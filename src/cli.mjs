@@ -88,6 +88,8 @@ function usage() {
   Exit 1 on any flagged / drifted / poisoned result — drop it in CI.`);
 }
 
+const advisoryLine = (f) => c(C.dim, `      · ${f.tool}: ${f.flags.join('; ')}  (advisory — capability mention, not an instruction)`);
+
 function runScan() {
   const list = allSources();
   if (!list.length) return (usage(), 2);
@@ -95,8 +97,10 @@ function runScan() {
   for (const { src, name } of list) {
     try {
       const r = scan(src);
-      out(`${mark[r.verdict]} ${c(C.bold, name || r.skill.name)} ${c(C.dim, `(${r.skill.kind})`)}  ${r.verdict}`);
+      const adv = r.advisories?.length ? c(C.yel, `  · ${r.advisories.length} advisory`) : '';
+      out(`${mark[r.verdict]} ${c(C.bold, name || r.skill.name)} ${c(C.dim, `(${r.skill.kind})`)}  ${r.verdict}${adv}`);
       r.findings.forEach((f) => out(findingLine(f)));
+      (r.advisories || []).forEach((f) => out(advisoryLine(f)));
       if (r.verdict !== 'clean') bad++;
     } catch (e) { out(`${c(C.red, '✗')} ${src}: ${e.message}`); bad++; }
   }
@@ -111,7 +115,7 @@ function runAdd() {
   for (const { src, name } of list) {
     try {
       const r = pin(src, { lockPath, sign: !!sign, force: !!force, name: name || opt('--name', undefined) });
-      if (r.ok) out(`${mark.ok} pinned ${c(C.bold, r.name)} ${c(C.dim, r.hash.slice(0, 12))}${r.signed ? c(C.dim, ' · signed') : ''}`);
+      if (r.ok) out(`${mark.ok} pinned ${c(C.bold, r.name)} ${c(C.dim, r.hash.slice(0, 12))}${r.signed ? c(C.dim, ' · signed') : ''}${r.advisories ? c(C.yel, ` · ${r.advisories} advisory`) : ''}`);
       else { out(`${mark.flagged} refused ${c(C.bold, name || src)} — poisoned (use --force to override):`); r.findings.forEach((f) => out(findingLine(f))); bad++; }
     } catch (e) { out(`${c(C.red, '✗')} ${src}: ${e.message}`); bad++; }
   }
