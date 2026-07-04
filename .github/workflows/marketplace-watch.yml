@@ -1,0 +1,63 @@
+# Standing watch: re-scan the official Claude Code plugin marketplace weekly
+# and publish the snapshot to the `watch` branch (badge.json drives the README
+# badge; WATCH.md is the human report; history.jsonl accumulates one line per
+# run). A poisoned skill turns the run red AND ships in the snapshot.
+name: marketplace-watch
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install canon
+        run: npm install --no-fund --no-audit
+
+      - name: Clone the marketplace at today's tip
+        run: git clone --depth 1 https://github.com/anthropics/claude-code.git "$RUNNER_TEMP/marketplace"
+
+      - name: Scan every marketplace skill
+        id: scan
+        run: |
+          status=0
+          node support/marketplace-watch.mjs "$RUNNER_TEMP/marketplace" "$RUNNER_TEMP/out" | tee "$RUNNER_TEMP/summary.json" || status=$?
+          if [ "$status" -ge 2 ]; then exit "$status"; fi # 2 = the watch itself broke; 1 (poisoned) still publishes below
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          {
+            echo '### marketplace watch'
+            echo ''
+            echo '```json'
+            cat "$RUNNER_TEMP/summary.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish snapshot to the watch branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/out"
+          git init -q -b watch
+          git config user.name askalf
+          git config user.email "263217947+askalf@users.noreply.github.com"
+          # carry forward the run-per-line history from the previous snapshot
+          if git fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" watch 2>/dev/null; then
+            git checkout -q FETCH_HEAD -- history.jsonl 2>/dev/null || true
+          fi
+          cat "$RUNNER_TEMP/summary.json" >> history.jsonl
+          git add -A
+          git commit -q -m "watch: $(date -u +%F) — $(cat "$RUNNER_TEMP/summary.json")"
+          git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" watch
+
+      - name: Fail the run if anything was poisoned
+        if: steps.scan.outputs.status != '0'
+        run: |
+          echo "::error::marketplace watch found poisoned skills — see WATCH.md on the watch branch"
+          exit 1
