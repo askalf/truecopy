@@ -1,78 +1,78 @@
 {
   "agentforce-adlc:agentforce-generate": {
-    "hash": "ed74cea86854e55e4ba0ffd24eb90d1da45d9535b7d08de75f4a5a6c5ab2da26",
+    "hash": "67403dd2058ba1d21cdd0918aa2728f745186ea092cae3f0d22d5e512e7f3a2c",
     "class": "security-testing fixtures",
     "note": "Salesforce Agentforce docs ship attack strings as test payloads",
     "reviewed": "2026-07-09"
   },
   "agentforce-adlc:agentforce-secure": {
-    "hash": "ccc4395c73d03e337fc06585ecbe3f14f7f3536ea9eecd1bc0f645d958f9ce90",
+    "hash": "2f2bf93f5f3efcb07e6e404cffbd295195267fb441c88857238c72b315e60723",
     "class": "security-testing fixtures",
     "note": "Salesforce Agentforce docs ship attack strings as test payloads",
     "reviewed": "2026-07-09"
   },
   "agentforce-adlc:agentforce-test": {
-    "hash": "be6ebe46ca358f79fd39d559a982ccc0e4e25e85afcb66119076720302424b12",
+    "hash": "8a23ff1c327b162c024bc79d348f91c3644cebf4bd04bcfbfb58dbb26ffed989",
     "class": "security-testing fixtures",
     "note": "Salesforce Agentforce docs ship attack strings as test payloads",
     "reviewed": "2026-07-09"
   },
   "aws-data-analytics:finding-data-lake-assets": {
-    "hash": "2edcbe38d887f614bcef51fac6ea08f5c0571d545d809423a332d00c4df2e2bc",
+    "hash": "fc9a76c35cbd1846bbf26b4d19758151e21c06c356a0008cd172db38058aba0a",
     "class": "defensive quoting",
     "note": "quotes 'ignore previous instructions' to teach resisting it",
     "reviewed": "2026-07-09"
   },
   "convex:billing": {
-    "hash": "6b882cce79bdc07d88b0929c6667dba300e45335cd79cd74b47655d65e4927e0",
+    "hash": "9f5c56457b2100f8b2094099909db9325839e61f3ff673a669acb8834f5bf8d5",
     "class": "paraphrased-exfil near-miss",
     "note": "Stripe integration docs: 'copy the signing secret as STRIPE_WEBHOOK_SECRET' — no exfil destination",
     "reviewed": "2026-07-09"
   },
   "databricks:databricks-mlflow-evaluation": {
-    "hash": "20f8282423b812daac28830cd2f289f3cc8b3b2805ffeba3711be28e3a0523b8",
+    "hash": "35237bc00a8d11b870dcd92bb09379863d0681ce610fe7bbde8df3c27c5c9d3a",
     "class": "defensive quoting",
     "note": "quotes 'ignore previous instructions' to teach resisting it",
     "reviewed": "2026-07-09"
   },
   "mercadopago:mp-integrate": {
-    "hash": "19cb534c437570a8900f011e9d410ccad33c1d455cfdc7727792dfbd3b34e3af",
+    "hash": "fd9fc44d2e1d2f69796a4f70d1602e6fdc656d52e22c3f9143522e71df000626",
     "class": "paraphrased-exfil near-miss",
     "note": "webhook signing-secret integration docs",
     "reviewed": "2026-07-09"
   },
   "posthog:setting-up-a-data-warehouse-source": {
-    "hash": "97c841618b8720221ad18064d5ac6fce898a034a1419e7b6e016fa7c102851af",
+    "hash": "28520f853450fe6cb736afd00416d19347651c2e0f7444e2e824fec835790e5a",
     "class": "paraphrased-exfil near-miss",
     "note": "data-warehouse source setup docs",
     "reviewed": "2026-07-09"
   },
   "resend:resend": {
-    "hash": "84e9edc3608d02799e324f0cb02e84ed9c7259c09b437ba89bd4a75421f922a9",
+    "hash": "4cf9339a290395c1d78ba8ae458aea0d639660cb20e61603ca4db8d60ba09c69",
     "class": "paraphrased-exfil near-miss",
     "note": "webhook signing-secret integration docs",
     "reviewed": "2026-07-09"
   },
   "sagemaker-ai:hyperpod-cluster-debugger": {
-    "hash": "65ccf70b8d23dcfeb58c59c828e5e6757c4618c542a77c4c64976011ce1308a5",
+    "hash": "48c2be74a8741b1970faa1ad710248cb64dcff0c9e26ba9c0d158bc7e37ded37",
     "class": "obfuscated remote-exec transport",
     "note": "AWS HyperPod debugging docs use base64|bash as a transport — transparent about what it runs",
     "reviewed": "2026-07-09"
   },
   "sagemaker-ai:hyperpod-nccl": {
-    "hash": "6e0ac5b13af9a86b809d513be2130e658f90e23a42213c21c4633a966aa44f7a",
+    "hash": "417186e1d00e2597c214d74ab02d608862ce495d8009ceed2efb0b4100a54e13",
     "class": "obfuscated remote-exec transport",
     "note": "AWS HyperPod debugging docs use base64|bash as a transport — transparent about what it runs",
     "reviewed": "2026-07-09"
   },
   "sagemaker-ai:hyperpod-node-debugger": {
-    "hash": "3c84cab257c41fca077b6575ff7a5657e8bf0d464bb4b4c3692a419c564cc169",
+    "hash": "f0966418e64944fb83c79875101f1386bfbc32db80b833c703b86f6666d269bc",
     "class": "obfuscated remote-exec transport",
     "note": "AWS HyperPod debugging docs use base64|bash as a transport — transparent about what it runs",
     "reviewed": "2026-07-09"
   },
   "sagemaker-ai:hyperpod-slurm-debugger": {
-    "hash": "5d2a5177a7e7efe9a7a9ec1eaa47fc145fda880b520e003cc1f22280be980d70",
+    "hash": "4d111f680e30f5e99136a5b916ffc12eecc3ab1183c4abbffd810ccd5bb5b56b",
     "class": "obfuscated remote-exec transport",
     "note": "AWS HyperPod debugging docs use base64|bash as a transport — transparent about what it runs",
     "reviewed": "2026-07-09"

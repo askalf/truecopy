@@ -29,6 +29,7 @@ jobs:
 
       - name: Fetch every catalog plugin at its pinned sha
         run: |
+          set -o pipefail # the tee must not mask the script's exit code
           node support/marketplace-fetch.mjs "$RUNNER_TEMP/directory" "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/fetch-summary.json"
           {
             echo '### marketplace fetch'
@@ -41,6 +42,7 @@ jobs:
       - name: Scan every directory skill
         id: scan
         run: |
+          set -o pipefail # without it `|| status=$?` reads tee's exit 0, and a poisoned scan stays green
           status=0
           node support/marketplace-watch.mjs "$RUNNER_TEMP/corpus" "$RUNNER_TEMP/out" | tee "$RUNNER_TEMP/summary.json" || status=$?
           if [ "$status" -ge 2 ]; then exit "$status"; fi # 2 = the watch itself broke; 1 (poisoned) still publishes below
