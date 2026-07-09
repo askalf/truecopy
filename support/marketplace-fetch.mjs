@@ -62,7 +62,10 @@ export function normalizeCatalog(catalog) {
   return entries;
 }
 
-const GIT_FLAGS = ['-c', 'core.longpaths=true', '-c', 'advice.detachedHead=false'];
+// autocrlf=false is load-bearing: the corpus must carry the repos' TRUE bytes
+// on every platform — a Windows fetch with the installer-default autocrlf=true
+// checks out CRLF, and every skill hash (watch-accepted.json) diverges from CI.
+const GIT_FLAGS = ['-c', 'core.longpaths=true', '-c', 'core.autocrlf=false', '-c', 'advice.detachedHead=false'];
 const git = (args, cwd) => new Promise((resolve) => {
   execFile('git', [...GIT_FLAGS, ...args], { cwd, timeout: 180_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
     resolve({ ok: !err, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') });
