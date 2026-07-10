@@ -1,8 +1,8 @@
 // Poison scan — reuse warden's supply-chain scanner (the OpenClaw poisoned-skill
 // class: injection / exfil instructions hidden in a tool's name, description, or
 // schema). canon adds the provenance layer on top; warden owns the detection.
-import { scanMcpTools } from '@askalf/warden/mcp';
-import { decide } from '@askalf/warden';
+import { scanMcpTools } from '@askalf/redstamp/mcp';
+import { decide } from '@askalf/redstamp';
 import { canonicalJson } from './hash.mjs';
 
 /** Scan a loaded skill for poisoning. → { verdict: 'clean'|'flagged', findings, advisories }
