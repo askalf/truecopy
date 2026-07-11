@@ -93,6 +93,6 @@ test('list: shows the pinned detection version when present; entries without one
   const run = cli(['list', '--lock', lock]);
   assert.equal(run.status, 0);
   const [fsLine, legacyLine] = ['fs', 'legacy'].map((n) => run.stdout.split('\n').find((x) => x.includes(` ${n} `)));
-  assert.match(fsLine, new RegExp(`redstamp ${detectionInfo().version.replace(/\./g, '\\.')}`));
+  assert.ok(fsLine.includes(`redstamp ${detectionInfo().version}`), `detection version in: ${fsLine}`);
   assert.doesNotMatch(legacyLine, /redstamp/);
 });
