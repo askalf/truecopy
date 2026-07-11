@@ -21,7 +21,7 @@ test('unpin: removes the entry, is a no-op on a missing name, never creates a lo
   const lock = tmp('u.lock');
   pin(write(tmp('u.json'), manifest('fs')), { lockPath: lock });
   assert.equal(unpin('fs', { lockPath: lock }), 1);
-  assert.deepEqual(readLock(lock).skills, {});
+  assert.deepEqual(Object.keys(readLock(lock).skills), []); // null-proto map — compare keys, not prototype
   assert.equal(unpin('fs', { lockPath: lock }), 0); // already gone — idempotent
   const absent = tmp('never.lock');
   assert.equal(unpin('ghost', { lockPath: absent }), 0);
@@ -63,7 +63,7 @@ test('canon remove: multiple names in one invocation, mixed hit/miss', () => {
   assert.match(r.stdout, /removed one/);
   assert.match(r.stdout, /no matching entry: ghost/);
   assert.match(r.stdout, /removed two/);
-  assert.deepEqual(readLock(lock).skills, {});
+  assert.deepEqual(Object.keys(readLock(lock).skills), []); // null-proto map — compare keys, not prototype
 });
 
 test('canon remove: no names is a usage error (exit 2); unpin alias works', () => {
@@ -71,5 +71,5 @@ test('canon remove: no names is a usage error (exit 2); unpin alias works', () =
   const lock = tmp('a.lock');
   pin(write(tmp('a.json'), manifest('fs')), { lockPath: lock });
   assert.equal(cli(['unpin', 'fs', '--lock', lock]).status, 0);
-  assert.deepEqual(readLock(lock).skills, {});
+  assert.deepEqual(Object.keys(readLock(lock).skills), []); // null-proto map — compare keys, not prototype
 });

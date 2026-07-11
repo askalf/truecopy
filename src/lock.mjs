@@ -5,6 +5,19 @@ import fs from 'node:fs';
 
 export const DEFAULT_LOCK = 'canon.lock';
 
+// `skills` is ALWAYS a NULL-PROTOTYPE map, on every readLock path — so a skill
+// keyed by a prototype member ("__proto__", "toString", "constructor", …) can't
+// hijack `[[Set]]`/`[[Get]]`. On a plain object `lock.skills["__proto__"] = entry`
+// invokes the __proto__ setter (the entry is silently dropped — pin reports
+// success but writes nothing), and `"toString" in lock.skills` is always true
+// (unpin "removes" a phantom, and on a fresh lock even CREATES the file). A
+// null-proto map makes every key an ordinary own property. Also guards the
+// corrupt/hostile `skills: null | array | string` shape (would crash
+// Object.entries / index assignment).
+const asSkills = (s) =>
+  Object.assign(Object.create(null), s && typeof s === 'object' && !Array.isArray(s) ? s : {});
+const emptyLock = () => ({ version: 1, skills: asSkills(null) });
+
 // A MISSING lock and a CORRUPT lock are different: an absent lock with
 // mustExist=false is a legitimately empty trust set; a present-but-unparseable
 // lock (truncated, merge-conflict markers, non-object) must fail CLOSED — never
@@ -15,7 +28,7 @@ export function readLock(p = DEFAULT_LOCK, { mustExist = false } = {}) {
   catch (e) {
     if (e && e.code === 'ENOENT') {
       if (mustExist) { const err = new Error(`no canon.lock at ${p}`); err.code = 'ELOCKMISSING'; throw err; }
-      return { version: 1, skills: {} };
+      return emptyLock();
     }
     throw e;
   }
@@ -23,11 +36,7 @@ export function readLock(p = DEFAULT_LOCK, { mustExist = false } = {}) {
   try { l = JSON.parse(raw); }
   catch (e) { const err = new Error(`canon.lock at ${p} is present but unparseable: ${e.message}`); err.code = 'ELOCKCORRUPT'; throw err; }
   if (!l || typeof l !== 'object' || Array.isArray(l)) { const err = new Error(`canon.lock at ${p} is not a lock object`); err.code = 'ELOCKCORRUPT'; throw err; }
-  // Guarantee `skills` is a plain object — a corrupt/hostile lock with
-  // `skills: null` (or an array/string) would otherwise crash verify()'s
-  // Object.entries and pin()'s index assignment.
-  const skills = l.skills && typeof l.skills === 'object' && !Array.isArray(l.skills) ? l.skills : {};
-  return { version: 1, ...l, skills };
+  return { version: 1, ...l, skills: asSkills(l.skills) };
 }
 
 export function writeLock(lock, p = DEFAULT_LOCK) {

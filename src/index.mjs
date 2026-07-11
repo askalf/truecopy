@@ -83,7 +83,10 @@ function verifyOne(name, entry, trust) {
   try { skill = loadSkill(entry.source); }
   catch { return { name, status: 'missing', source: entry.source }; }
   const hash = skillHash(skill);
-  if (hash !== entry.hash) return { name, status: 'drifted', source: entry.source, ...diffParts(entry.parts, partsOf(skill)) };
+  // `entry.parts || {}` (not diffParts' default) because a hostile lock can carry
+  // parts:null — the default only fills `undefined`, so `k in null` would throw an
+  // uncaught TypeError up through verify() (diff() already guards this the same way).
+  if (hash !== entry.hash) return { name, status: 'drifted', source: entry.source, ...diffParts(entry.parts || {}, partsOf(skill)) };
   const s = scanSkill(skill);
   // A `--force` pin recorded verdict:'flagged' — the human read these exact bytes
   // and accepted the findings, so an UNCHANGED artifact doesn't re-fail on them.
