@@ -31,6 +31,10 @@ const sources = (() => {
 })();
 const lockPath = opt('--lock', 'canon.lock');
 const optTrust = () => { const t = opt('--trust', undefined); return typeof t === 'string' ? t : undefined; };
+// `--json` — machine-readable output for scan/verify/list/diff: one JSON document
+// on stdout, no ANSI, and the SAME exit codes (the CI gate contract is the exit
+// code; --json only changes what a dashboard/PR-commenter can parse from stdout).
+const jsonOut = !!opt('--json', false);
 
 // `--claude` expands to every Claude Code skill visible from here (.claude/skills,
 // project + user scope); `--claude-plugins` adds every skill shipped by installed
@@ -74,6 +78,7 @@ function usage() {
   canon list                        show the pinned set
   canon remove <name...>            un-pin a skill — drop its ${lockPath} entry (alias: unpin)
   canon guard [--lock <file>] -- <cmd...>   verify the lock, then run <cmd> only if it's clean
+  …scan / verify / list / diff take --json: machine-readable stdout, same exit codes
 
   canon key                         print this machine's public key + id (share it to be trusted)
   canon trust add <pubkey> --name <who> [--repo]   trust a publisher's key (--repo → commit it to canon.trust)
@@ -100,16 +105,27 @@ function runScan() {
   const list = allSources();
   if (!list.length) return (usage(), 2);
   let bad = 0;
+  const results = [];
   for (const { src, name } of list) {
     try {
       const r = scan(src);
-      const adv = r.advisories?.length ? c(C.yel, `  · ${r.advisories.length} advisory`) : '';
-      out(`${mark[r.verdict]} ${c(C.bold, name || r.skill.name)} ${c(C.dim, `(${r.skill.kind})`)}  ${r.verdict}${adv}`);
-      r.findings.forEach((f) => out(findingLine(f)));
-      (r.advisories || []).forEach((f) => out(advisoryLine(f)));
+      if (jsonOut) results.push({ name: name || r.skill.name, kind: r.skill.kind, verdict: r.verdict, findings: r.findings, advisories: r.advisories || [] });
+      else {
+        const adv = r.advisories?.length ? c(C.yel, `  · ${r.advisories.length} advisory`) : '';
+        out(`${mark[r.verdict]} ${c(C.bold, name || r.skill.name)} ${c(C.dim, `(${r.skill.kind})`)}  ${r.verdict}${adv}`);
+        r.findings.forEach((f) => out(findingLine(f)));
+        (r.advisories || []).forEach((f) => out(advisoryLine(f)));
+      }
       if (r.verdict !== 'clean') bad++;
-    } catch (e) { out(`${c(C.red, '✗')} ${src}: ${e.message}`); bad++; }
+    } catch (e) {
+      // an unreadable source counts against `flagged` — it fails the gate today, and
+      // a JSON consumer must see WHY the exit code is 1
+      if (jsonOut) results.push({ name: name || src, error: e.message });
+      else out(`${c(C.red, '✗')} ${src}: ${e.message}`);
+      bad++;
+    }
   }
+  if (jsonOut) out(JSON.stringify({ results, flagged: bad }));
   return bad ? 1 : 0;
 }
 
@@ -130,6 +146,9 @@ function runAdd() {
 
 function runVerify() {
   const { ok, results, error } = verify({ lockPath, trustPath: optTrust() });
+  // the library return IS the documented shape — emit it verbatim (incl. `error`
+  // for a missing/corrupt lock, which keeps failing closed with exit 1)
+  if (jsonOut) { out(JSON.stringify(error === undefined ? { ok, results } : { ok, results, error })); return ok ? 0 : 1; }
   if (error) { out(c(C.red, `⛔ ${error}`)); return 1; }
   if (!results.length) { out(c(C.dim, `no pinned skills in ${lockPath}`)); return 0; }
   for (const r of results) {
@@ -147,6 +166,7 @@ function runVerify() {
 function runDiff() {
   if (!sources.length) return (usage(), 2);
   const r = diff(sources[0], { lockPath, name: opt('--name', undefined) });
+  if (jsonOut) { out(JSON.stringify(r)); return r.status === 'drifted' || r.status === 'unpinned' ? 1 : 0; }
   out(`${mark[r.status] || '?'} ${c(C.bold, r.name)}  ${r.status}`);
   if (r.status === 'drifted') {
     out(c(C.dim, `      was ${r.was.slice(0, 12)} → now ${r.now.slice(0, 12)}`));
@@ -166,6 +186,11 @@ function summary(r) {
 function runList() {
   const lock = readLock(lockPath);
   const names = Object.keys(lock.skills);
+  if (jsonOut) {
+    const skills = names.map((n) => { const e = lock.skills[n]; return { name: n, kind: e.kind, hash: e.hash, scannedAt: e.scannedAt, signed: !!(e.sig || e.signed) }; });
+    out(JSON.stringify({ skills }));
+    return 0;
+  }
   if (!names.length) { out(c(C.dim, `no pinned skills in ${lockPath}`)); return 0; }
   for (const n of names) {
     const e = lock.skills[n];

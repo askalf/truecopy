@@ -165,6 +165,7 @@ Trust comes from three sources, unioned: your own machine's key (implicit, so a 
 
 ```yaml
 - run: npx -y github:askalf/truecopy verify   # fails the build if any pinned skill drifted or turned poisonous
+- run: npx -y github:askalf/truecopy verify --json > truecopy-report.json   # same gate, machine-readable — feed a dashboard / PR comment (scan, list, diff take --json too)
 ```
 
 **Sign in CI, not on laptops.** Hold the private signing key as a single CI secret instead of scattering it across developer machines. Set **`CANON_SIGNING_KEY`** to the private key (a raw ed25519 PEM, or base64-encoded) — truecopy derives the public key from it, so signing needs no `~/.truecopy` file and no keychain, and the key keeps the same `keyId`:
