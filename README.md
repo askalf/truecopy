@@ -1,6 +1,6 @@
 # truecopy
 
-[![marketplace watch](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json)](https://github.com/askalf/truecopy/blob/watch/WATCH.md)
+[![marketplace watch](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json)](https://github.com/askalf/truecopy/blob/watch/WATCH.md) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge)](https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy)
 
 > _truecopy — **own your agent skills**. Vet, sign, and pin every skill & MCP server before it runs. Part of **[Own Your Stack](https://github.com/askalf)** — own your AI infrastructure instead of renting it by the token._
 
