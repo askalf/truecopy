@@ -1,12 +1,73 @@
 # Changelog
 
-## 0.6.2
-
-- **Renamed: `@askalf/canon` → `@askalf/truecopy`** (npm-publishable name; `canon` is squatted unscoped and the registry create-policy blocks colliding scoped names). GitHub repo becomes `askalf/truecopy` (old URLs redirect). Legacy `canon`/`canon-mcp` bin aliases retained alongside `truecopy`/`truecopy-mcp`.
-
-All notable changes to **@askalf/canon** are documented here. The format is
+All notable changes to **@askalf/truecopy** are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
+
+## [0.7.0] - 2026-07-11
+
+A security-hardening release following a full adversarial audit of the gate:
+several fail-open paths are now fail-closed, plus signature enforcement,
+machine-readable output, and lock lifecycle commands.
+
+> **⚠️ Behavior change — `CANON_SIGNING_KEY` is sign-only.** The CI signing key
+> is no longer implicitly trusted at verify time; it signs only. If a `verify`
+> step relied on that implicit self-trust, commit the signing **public** key to
+> `truecopy.trust` (`truecopy trust add <pub.pem> --repo`), as the docs already
+> recommend — that is what verification checks the signature against. Local
+> `--sign` with a machine key is unchanged.
+
+### Added
+- **`--require-signed`** on `verify` and `guard` — opt-in policy that rejects any
+  pinned entry lacking a valid signature from a **trusted** key, so a lock
+  substitution that strips the signature and swaps in other clean-scanning bytes
+  fails closed instead of verifying green.
+- **`truecopy remove <name…>`** (alias `unpin`) + library `unpin()` — un-pin a
+  skill without hand-editing the lock; idempotent and CI-safe.
+- **`--json`** on `scan` / `verify` / `list` / `diff` — one machine-readable JSON
+  document on stdout with unchanged exit codes, for dashboards and PR comments.
+- **Detection provenance** — `add` records the detection engine + version in each
+  lock entry; when a clean-pinned skill re-flags on **unchanged bytes**, `verify`
+  explains it as "same bytes, newer detection" rather than a bare tamper.
+
+### Security / Fixed
+- **MCP gate fails closed on JSON-RPC batches and pre-`tools/list` calls.** A
+  batched `tools/list`/`tools/call` bypassed both gates, and a call before the
+  first gated list was forwarded unchecked. Both are now blocked.
+- **Symlinks in a skill directory are no longer silently skipped.** An in-dir
+  file symlink is hashed + scanned (poison behind it is caught; a repoint is
+  drift); an escaping / directory / broken link is pinned by its target string
+  without being traversed.
+- **Lock hardened against prototype-keyed skill names.** A skill named
+  `__proto__`/`toString`/… no longer silently drops on `add` (which reported
+  success while writing nothing) or creates a lock on a no-op `remove`; `verify`
+  no longer throws on a hostile `parts: null` entry.
+- **Cross-OS deterministic hashes.** Skill directories are hashed in
+  portable-path order, so the same bytes hash identically on Windows and POSIX
+  and a committed lock verifies across machines (and a `.gitattributes` pins the
+  tree to LF).
+- **Strict hook fails closed on an unreadable payload** — a malformed hook stdin
+  no longer allows the skill under `--strict`.
+- **`list` / `diff --json` emit a JSON error object** (not empty stdout) on a
+  corrupt lock or missing source, and `list` no longer crashes on a partial
+  hand-edited entry.
+
+### Changed
+- **`CANON_SIGNING_KEY` signs only, not auto-trusted at verify time** — see the
+  behavior-change note above.
+- **`hook install` writes a version-pinned command**
+  (`npx -y github:askalf/truecopy#v<version> …`, correct repo name, 20 s timeout)
+  instead of an unpinned ref refetched on every Skill invocation.
+
+### Internal
+- Signing tests no longer touch the real OS keychain (fixes the macOS flake and a
+  contributor-key clobber); CI/workflow hardening (publish restricted to
+  `master`, E404-only registry gates, least-privilege checkouts); added CRLF and
+  UTF-16 decode coverage.
+
+## [0.6.2] - 2026-07-11
+
+- **Renamed: `@askalf/canon` → `@askalf/truecopy`** (npm-publishable name; `canon` is squatted unscoped and the registry create-policy blocks colliding scoped names). GitHub repo becomes `askalf/truecopy` (old URLs redirect). Legacy `canon`/`canon-mcp` bin aliases retained alongside `truecopy`/`truecopy-mcp`.
 
 ## [0.6.1] - 2026-07-03
 
