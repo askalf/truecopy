@@ -1,0 +1,101 @@
+name: npm drift watch
+
+# Daily check that the npm registry carries what master says it should:
+# `npm view @askalf/truecopy version` (dist-tag latest) must equal the
+# version field in master's package.json. Opens a GitHub issue on drift.
+#
+# Replaces npm-token-health.yml: with OIDC trusted publishing there is no
+# token left to health-check, and the failure mode worth watching is the
+# one the old whoami probe could only infer indirectly — REGISTRY DRIFT
+# (publish run failed, trusted-publisher misconfig, lost dispatch). This
+# checks the outcome, not a proxy, and needs no npm auth at all.
+#
+# Triggers:
+#  - daily at 04:17 UTC (off-peak, offset minute to avoid stacking)
+#  - workflow_dispatch for manual verification right after fixing a strand
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+
+      - name: Compare registry latest vs master package.json
+        id: check
+        run: |
+          set -euo pipefail
+          expected=$(node -p "require('./package.json').version")
+          published=$(npm view @askalf/truecopy version 2>/dev/null || echo "(unpublished)")
+          echo "expected=${expected}" >> "$GITHUB_OUTPUT"
+          echo "published=${published}" >> "$GITHUB_OUTPUT"
+          if [ "$expected" = "$published" ]; then
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+            echo "In sync: registry latest = ${published}"
+          else
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+            echo "::error::npm drift: master's package.json says ${expected}, registry latest is ${published}"
+          fi
+
+      - name: Open issue on drift
+        if: steps.check.outputs.drift == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED: ${{ steps.check.outputs.expected }}
+          PUBLISHED: ${{ steps.check.outputs.published }}
+        run: |
+          marker='<!-- truecopy-npm-drift -->'
+          existing=$(gh issue list -R "${{ github.repository }}" --state open --search "in:body $marker" --json number --jq '.[0].number // ""')
+          if [ -n "$existing" ]; then
+            echo "Existing open drift issue #$existing — leaving alone."
+            exit 0
+          fi
+
+          body_file=$(mktemp)
+          {
+            echo "$marker"
+            echo ""
+            echo "### npm registry is behind master"
+            echo ""
+            echo "master's \`package.json\` says \`$EXPECTED\` but the registry's \`latest\` is \`$PUBLISHED\`. A release is stranded: the publish run failed, the trusted publisher is misconfigured, or the auto-release dispatch never landed."
+            echo ""
+            echo "### To fix"
+            echo ""
+            echo "1. Check the latest [Publish to npm run](https://github.com/${{ github.repository }}/actions/workflows/publish.yml) for the actual error"
+            echo "2. If it's an auth/config failure: npmjs.com -> \`@askalf/truecopy\` -> Settings -> **Trusted Publisher** must be GitHub Actions org \`askalf\`, repo \`truecopy\`, workflow \`publish.yml\`"
+            echo "3. Backfill: \`gh workflow run publish.yml -R askalf/truecopy --ref master\` (idempotent — green no-op if already published)"
+            echo "4. Verify: \`gh workflow run npm-drift-watch.yml -R askalf/truecopy\` — this issue auto-closes when the next check passes"
+            echo ""
+            echo "### Workflow run"
+            echo ""
+            echo "[Run #${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          } > "$body_file"
+
+          gh issue create \
+            -R "${{ github.repository }}" \
+            --title "npm drift: registry latest ($PUBLISHED) != master ($EXPECTED)" \
+            --body-file "$body_file" \
+            --label "npm-drift"
+
+      - name: Auto-close any open drift issue on sync
+        if: steps.check.outputs.drift == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          marker='<!-- truecopy-npm-drift -->'
+          open_issues=$(gh issue list -R "${{ github.repository }}" --state open --search "in:body $marker" --json number --jq '.[].number')
+          for n in $open_issues; do
+            gh issue close "$n" -R "${{ github.repository }}" --comment "Auto-closed: registry and master agree again ([run #${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}))."
+          done

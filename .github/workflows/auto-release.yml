@@ -2,7 +2,14 @@ name: Auto-release
 
 # Triggered when package.json's "version" field changes on master.
 # Tags vX.Y.Z, creates a GitHub release from the matching CHANGELOG
-# section, and runs `npm publish --provenance --access public`.
+# section, then DISPATCHES publish.yml, which publishes to npm via OIDC
+# trusted publishing (tokenless — no NPM_TOKEN anywhere in this repo).
+#
+# Why a dispatch instead of publishing inline: npm allows one trusted
+# publisher per package and it is bound to publish.yml's filename. And a
+# `release: published` trigger over there would never fire — events created
+# with GITHUB_TOKEN (like our `gh release create`) do not start workflows.
+# An explicit `gh workflow run` does.
 #
 # Idempotent — if the tag already exists the job exits cleanly without
 # republishing. Manual re-runs via workflow_dispatch are safe.
@@ -16,7 +23,7 @@ on:
 
 permissions:
   contents: write
-  id-token: write
+  actions: write # to dispatch publish.yml
 
 jobs:
   release:
@@ -123,8 +130,8 @@ jobs:
             --title "$TAG" \
             --notes-file release-notes.md
 
-      - name: npm publish
+      - name: Hand off to the OIDC publisher
         if: steps.gate.outputs.skip != 'true' && steps.bumped.outputs.skip != 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run publish.yml --repo "${{ github.repository }}" --ref master
