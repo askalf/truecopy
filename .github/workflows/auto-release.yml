@@ -113,7 +113,7 @@ jobs:
           node -e "
             const fs = require('fs');
             const md = fs.existsSync('CHANGELOG.md') ? fs.readFileSync('CHANGELOG.md', 'utf-8') : '';
-            const re = new RegExp('^## \\\\[' + process.env.VERSION + '\\\\][^\\\\n]*\\\\n([\\\\s\\\\S]*?)(?=\\\\n## \\\\[|$)', 'm');
+            const re = new RegExp('^## \\\\[' + process.env.VERSION + '\\\\][^\\\\n]*\\\\n([\\\\s\\\\S]*?)(?=\\\\n## \\\\[|(?![\\\\s\\\\S]))', 'm');
             const m = re.exec(md);
             const body = m ? m[1].trim() : '';
             fs.writeFileSync('release-notes.md', body || ('Release v' + process.env.VERSION));
