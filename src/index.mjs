@@ -69,12 +69,21 @@ export function unpin(name, { lockPath = DEFAULT_LOCK } = {}) {
 /** Re-derive every pinned skill and classify it against the lock.
  *  Fails CLOSED on a missing or corrupt lock — a present-but-empty lock stays
  *  ok:true (legitimately nothing pinned). */
-export function verify({ lockPath = DEFAULT_LOCK, trustPath } = {}) {
+export function verify({ lockPath = DEFAULT_LOCK, trustPath, requireSigned = false } = {}) {
   let lock;
   try { lock = readLock(lockPath, { mustExist: true }); }
   catch (e) { return { ok: false, error: e.message, results: [] }; }
   const trust = loadTrust({ trustPath });
   const results = Object.entries(lock.skills).map(([name, entry]) => verifyOne(name, entry, trust));
+  // Opt-in strict policy: reject any entry that lacks a valid signature from a
+  // TRUSTED key. Without it, `--sign` only helps if you also *look* — a lock
+  // substitution that strips `sig`+`signed` and re-points at other clean-scanning
+  // bytes verifies `ok`. requireSigned makes that fail closed: an ok-but-unsigned
+  // (or force-accepted-unsigned) entry becomes `unsigned`. Entries already failing
+  // (drifted/poisoned/untrusted/missing) are untouched.
+  if (requireSigned) for (const r of results) {
+    if (r.status === 'ok' && !(r.signed && r.signer)) { r.status = 'unsigned'; r.requiredSignature = true; }
+  }
   return { ok: results.every((r) => r.status === 'ok'), results };
 }
 
