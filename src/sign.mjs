@@ -58,10 +58,16 @@ const readFile = () => { try { return JSON.parse(fs.readFileSync(keyFile(), 'utf
 /** The local key if it already exists, else null — never generates one (so a
  *  read-only path like `verify` building its trust set can't create key material).
  *  The private half comes from the OS keychain; a legacy plaintext private in the
- *  file is honored as a fallback so existing installs keep working pre-migration. */
-export function loadKey() {
-  const env = envKey();
-  if (env) return env;                                       // CI: key from CANON_SIGNING_KEY
+ *  file is honored as a fallback so existing installs keep working pre-migration.
+ *
+ *  `envAllowed:false` skips the CANON_SIGNING_KEY env key and returns ONLY the
+ *  machine's persistent local identity. The trust set uses this: the CI signing
+ *  key is for signing, not for auto-trusting — folding it into the verify-time
+ *  trust set as `self` would let anyone who can inject that env var into a verify
+ *  process become a trusted signer. (Commit its public key to canon.trust to
+ *  verify a lock it signed — the documented flow.) */
+export function loadKey({ envAllowed = true } = {}) {
+  if (envAllowed) { const env = envKey(); if (env) return env; } // CI: key from CANON_SIGNING_KEY
   const file = readFile();
   if (!file || !file.publicKey) return file;                 // no key (or unreadable)
   if (keychainAvailable()) {

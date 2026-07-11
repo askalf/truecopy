@@ -35,7 +35,11 @@ export function loadTrust({ trustPath, cwd = process.cwd() } = {}) {
     const id = keyId(k.publicKey);
     if (!map.has(id)) map.set(id, { id, name: k.name || id.slice(0, 12), publicKey: k.publicKey });
   };
-  const self = loadKey(); if (self) add({ name: 'self', publicKey: self.publicKey });
+  // self = the machine's PERSISTENT local key only — NOT a CANON_SIGNING_KEY env
+  // key. A CI signing key signs; it isn't auto-trusted at verify time (that would
+  // let env-var injection into a verify process mint a trusted signer). Its public
+  // key belongs in canon.trust if you want to verify what it signed.
+  const self = loadKey({ envAllowed: false }); if (self) add({ name: 'self', publicKey: self.publicKey });
   for (const k of readStore(homeStore())) add(k);
   for (const k of readStore(trustPath || path.join(cwd, DEFAULT_REPO_TRUST))) add(k);
   return map;

@@ -184,6 +184,8 @@ Trust comes from three sources, unioned: your own machine's key (implicit, so a 
 
 Mint the identity once (`openssl genpkey -algorithm ed25519`), store the private key as the `CANON_SIGNING_KEY` secret, and commit its public key to **`truecopy.trust`** (`truecopy trust add <pub.pem> --repo`). Everyone else — laptops, the fleet, the verify job above — carries only the public key, so they `verify` but never sign: one signing identity in one secret, not a private key on every box.
 
+> The `CANON_SIGNING_KEY` env key **signs only** — it is *not* auto-trusted at verify time (otherwise anyone who could set that env var on a verify runner would become a trusted signer). So committing its public key to `truecopy.trust` is required, not optional: that is what a `verify` step checks the signature against.
+
 ## Library
 
 ```js
