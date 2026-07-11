@@ -1,9 +1,39 @@
 // Poison scan — reuse warden's supply-chain scanner (the OpenClaw poisoned-skill
 // class: injection / exfil instructions hidden in a tool's name, description, or
 // schema). canon adds the provenance layer on top; warden owns the detection.
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
 import { scanMcpTools } from '@askalf/redstamp/mcp';
 import { decide } from '@askalf/redstamp';
 import { canonicalJson } from './hash.mjs';
+
+// Which detection engine vetted a pin. redstamp is a pinned dependency that gets
+// bumped, so "clean" is always clean-as-of-some-ruleset — recording the version at
+// pin time lets verify explain the "same bytes, suddenly poisoned" outcome as
+// detection-improved rather than looking like a tamper. Resolved locally and
+// offline; redstamp's exports map hides ./package.json, so resolve the entry
+// module and walk up to its package.json. Never throws — provenance is an
+// enrichment, and an unreadable version must not break pinning.
+const resolveEngineEntry = () => createRequire(import.meta.url).resolve('@askalf/redstamp');
+let cached; // per-process: the engine version can't change mid-run
+export function detectionInfo(resolveEntry) {
+  if (!resolveEntry && cached !== undefined) return cached;
+  let det = null;
+  try {
+    let dir = path.dirname((resolveEntry || resolveEngineEntry)());
+    for (let up = path.dirname(dir); ; dir = up, up = path.dirname(dir)) {
+      const p = path.join(dir, 'package.json');
+      if (fs.existsSync(p)) {
+        const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (pkg && pkg.name === '@askalf/redstamp' && pkg.version) { det = { engine: 'redstamp', version: pkg.version }; break; }
+      }
+      if (up === dir) break;
+    }
+  } catch { det = null; }
+  if (!resolveEntry) cached = det;
+  return det;
+}
 
 /** Scan a loaded skill for poisoning. → { verdict: 'clean'|'flagged', findings, advisories }
  *

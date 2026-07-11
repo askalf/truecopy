@@ -157,7 +157,12 @@ function runVerify() {
     out(`${mark[r.status] || '?'} ${c(C.bold, r.name)}  ${r.status}${sig}${acc}`);
     if (r.status === 'drifted') out(c(C.dim, `      ${summary(r)}`));
     if (r.status === 'untrusted') out(c(C.dim, `      key ${r.keyId} not trusted — canon trust add <pubkey> --name <publisher>`));
-    if (r.status === 'poisoned') r.findings.forEach((f) => out(findingLine(f)));
+    if (r.status === 'poisoned') {
+      r.findings.forEach((f) => out(findingLine(f)));
+      // the single most confusing verify outcome, disambiguated: the bytes did not
+      // move — the detection did. Still fails closed; a human must re-accept.
+      if (r.detectionChanged) out(c(C.dim, `      same bytes — flagged by newer detection (${r.pinnedDetection.engine} ${r.pinnedDetection.version} → ${r.currentDetection?.version || 'unknown'}); review, then re-accept with: canon add --force ${r.source}`));
+    }
   }
   out(ok ? c(C.grn, `\nall ${results.length} pinned skills verified`) : c(C.red, `\n${results.filter((r) => r.status !== 'ok').length}/${results.length} FAILED — review above`));
   return ok ? 0 : 1;
@@ -187,14 +192,14 @@ function runList() {
   const lock = readLock(lockPath);
   const names = Object.keys(lock.skills);
   if (jsonOut) {
-    const skills = names.map((n) => { const e = lock.skills[n]; return { name: n, kind: e.kind, hash: e.hash, scannedAt: e.scannedAt, signed: !!(e.sig || e.signed) }; });
+    const skills = names.map((n) => { const e = lock.skills[n]; return { name: n, kind: e.kind, hash: e.hash, scannedAt: e.scannedAt, signed: !!(e.sig || e.signed), ...(e.detection ? { detection: e.detection } : {}) }; });
     out(JSON.stringify({ skills }));
     return 0;
   }
   if (!names.length) { out(c(C.dim, `no pinned skills in ${lockPath}`)); return 0; }
   for (const n of names) {
     const e = lock.skills[n];
-    out(`${c(C.grn, '●')} ${c(C.bold, n)} ${c(C.dim, `${e.kind} · ${e.hash.slice(0, 12)} · ${e.scannedAt.slice(0, 10)}${e.sig ? ' · signed' : ''}`)}`);
+    out(`${c(C.grn, '●')} ${c(C.bold, n)} ${c(C.dim, `${e.kind} · ${e.hash.slice(0, 12)} · ${e.scannedAt.slice(0, 10)}${e.detection ? ` · ${e.detection.engine} ${e.detection.version}` : ''}${e.sig ? ' · signed' : ''}`)}`);
   }
   return 0;
 }

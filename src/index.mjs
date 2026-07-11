@@ -2,13 +2,13 @@
 // (drift) every skill & MCP server before it runs. The supply-chain gate that
 // pairs with warden's runtime firewall: vet it → contain it.
 import { loadSkill, skillHash } from './skill.mjs';
-import { scanSkill } from './scan.mjs';
+import { scanSkill, detectionInfo } from './scan.mjs';
 import { readLock, writeLock, DEFAULT_LOCK } from './lock.mjs';
 import { signHash, verifyHashSig, keyId, ensureKey } from './sign.mjs';
 import { loadTrust, trustedSigner, trustKey, untrustKey, listTrust } from './trust.mjs';
 import { sha256, canonicalJson } from './hash.mjs';
 
-export { loadSkill, skillHash, scanSkill, readLock, writeLock, DEFAULT_LOCK };
+export { loadSkill, skillHash, scanSkill, detectionInfo, readLock, writeLock, DEFAULT_LOCK };
 export { signHash, verifyHashSig, keyId, ensureKey };
 export { loadTrust, trustedSigner, trustKey, untrustKey, listTrust };
 export { claudeSkillRoots, discoverClaudeSkills, discoverClaudePluginSkills, discoverMarketplaceSkills, resolveClaudeSkill } from './claude.mjs';
@@ -46,6 +46,7 @@ export function pin(source, { lockPath = DEFAULT_LOCK, sign = false, force = fal
     source: skill.source, kind: skill.kind, hash,
     scannedAt: new Date().toISOString(), verdict: s.verdict, findings: s.findings.length,
     ...(s.advisories?.length ? { advisories: s.advisories.length } : {}), // mentions noted at pin time, for the record
+    ...((d) => (d ? { detection: d } : {}))(detectionInfo()), // WHAT this verdict was judged against — omitted if unreadable, never fatal
     parts: partsOf(skill),
     ...(sign ? { sig: signHash(hash), signed: true } : {}),
   };
@@ -89,7 +90,17 @@ function verifyOne(name, entry, trust) {
   // A skill pinned CLEAN that now scans flagged (same bytes, newer detection) still
   // fails: nobody accepted those findings.
   const accepted = s.verdict === 'flagged' && entry.verdict === 'flagged';
-  if (s.verdict === 'flagged' && !accepted) return { name, status: 'poisoned', source: entry.source, findings: s.findings };
+  if (s.verdict === 'flagged' && !accepted) {
+    // Pinned CLEAN, flagged NOW, and the hash already matched above — so the bytes
+    // did not change; the detection did. Same fail-closed `poisoned` (nobody
+    // accepted these findings), but tagged so the CLI can say "this is not a
+    // tamper" — only for entries that carry a pin-time detection stamp; older
+    // locks get exactly today's bare report.
+    const explain = entry.verdict === 'clean' && entry.detection
+      ? { detectionChanged: true, pinnedDetection: entry.detection, currentDetection: detectionInfo() }
+      : {};
+    return { name, status: 'poisoned', source: entry.source, findings: s.findings, ...explain };
+  }
   if (entry.signed || entry.sig) {
     // A signature that was STRIPPED or forged-against-a-different-hash fails the
     // crypto check → `unsigned` (trust the recorded `signed` flag, not just a
