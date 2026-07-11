@@ -7,7 +7,9 @@
 # `vetted`, and the poison scanner always returns a well-formed verdict on any
 # malformed skill.
 cd "$SRC/truecopy"
-npm install --no-audit --no-fund
+# npm ci verifies every integrity hash in the committed lockfile
+# (Scorecard Pinned-Dependencies); Jazzer comes in as the locked devDependency.
+npm ci --no-audit --no-fund
 
 for target in canonical_json gate_tools scan_skill; do
   compile_javascript_fuzzer truecopy "fuzz/${target}.fuzz.js" --sync
