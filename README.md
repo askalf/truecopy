@@ -20,11 +20,11 @@ Deterministic and offline. truecopy shares **[redstamp](https://github.com/askal
 ## Install
 
 ```bash
-npm i -g github:askalf/truecopy          # latest
-npm i -g github:askalf/truecopy#v0.6.1   # pinned release
+npm i -g @askalf/truecopy                # latest, from npm
+npm i -g @askalf/truecopy@0.8.0          # pinned release
 ```
 
-> Not yet on npm — installs straight from GitHub (or prefix any command below with `npx -y github:askalf/truecopy`).
+> Also installable straight from GitHub: `npm i -g github:askalf/truecopy`. Every command below runs one-shot with `npx -y @askalf/truecopy` (or `npx -y github:askalf/truecopy`).
 
 ## Quick start
 
@@ -159,7 +159,7 @@ Trust comes from three sources, unioned: your own machine's key (implicit, so a 
 
 ## In CI
 
-> Not yet on npm — installs straight from GitHub.
+> On npm as `@askalf/truecopy` — the snippets below use the GitHub form, but `npx -y @askalf/truecopy verify` works the same.
 
 **Verify everywhere** — the gate. Public key only, no secret:
 
