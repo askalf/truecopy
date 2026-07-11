@@ -34,6 +34,7 @@ truecopy add  ./mcp-server.json --sign   # vet + pin into truecopy.lock (refuses
 truecopy verify                          # re-check every pinned skill for drift / poisoning  (CI: exit 1 on any fail)
 truecopy diff ./mcp-server.json          # what changed since you pinned it
 truecopy list                            # the pinned set
+truecopy remove old-skill                # un-pin a deprecated skill — drops its lock entry, no hand-editing (a signed lock would flag that as tampering)
 truecopy guard -- npm start              # verify the lock, then launch only if it's clean
 truecopy add --claude --claude-plugins --sign   # pin every Claude Code skill — project, user, and marketplace-plugin scope
 truecopy hook install                    # …and wire the invocation-time gate into .claude/settings.json
