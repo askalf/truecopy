@@ -1,9 +1,27 @@
-// canon.lock — the pinned, vetted set. One entry per trusted skill: where it came
-// from, the content hash you trusted, the scan verdict at pin time, and (optional)
-// a signature. `verify` re-derives the hash and flags any drift from this file.
+// truecopy.lock — the pinned, vetted set. One entry per trusted skill: where it
+// came from, the content hash you trusted, the scan verdict at pin time, and
+// (optional) a signature. `verify` re-derives the hash and flags any drift from
+// this file.
 import fs from 'node:fs';
+import path from 'node:path';
 
-export const DEFAULT_LOCK = 'canon.lock';
+// The lock filename was `canon.lock` before the rename. New locks are written as
+// `truecopy.lock`, but an existing `canon.lock` is still read (see resolveLock)
+// so a repo pinned before the rename keeps verifying with zero changes.
+export const DEFAULT_LOCK = 'truecopy.lock';
+export const LEGACY_LOCK = 'canon.lock';
+
+/** Pick the lock file when the caller didn't pass one explicitly: prefer the
+ *  branded `truecopy.lock`, transparently fall back to an existing `canon.lock`,
+ *  and default to `truecopy.lock` when neither exists (so fresh pins are branded). */
+export function resolveLock(explicit, dir = '.') {
+  if (typeof explicit === 'string' && explicit) return explicit;
+  for (const name of [DEFAULT_LOCK, LEGACY_LOCK]) {
+    const p = path.join(dir, name);
+    try { if (fs.existsSync(p)) return p; } catch {}
+  }
+  return path.join(dir, DEFAULT_LOCK);
+}
 
 // `skills` is ALWAYS a NULL-PROTOTYPE map, on every readLock path — so a skill
 // keyed by a prototype member ("__proto__", "toString", "constructor", …) can't
@@ -27,15 +45,15 @@ export function readLock(p = DEFAULT_LOCK, { mustExist = false } = {}) {
   try { raw = fs.readFileSync(p, 'utf8'); }
   catch (e) {
     if (e && e.code === 'ENOENT') {
-      if (mustExist) { const err = new Error(`no canon.lock at ${p}`); err.code = 'ELOCKMISSING'; throw err; }
+      if (mustExist) { const err = new Error(`no lock file at ${p}`); err.code = 'ELOCKMISSING'; throw err; }
       return emptyLock();
     }
     throw e;
   }
   let l;
   try { l = JSON.parse(raw); }
-  catch (e) { const err = new Error(`canon.lock at ${p} is present but unparseable: ${e.message}`); err.code = 'ELOCKCORRUPT'; throw err; }
-  if (!l || typeof l !== 'object' || Array.isArray(l)) { const err = new Error(`canon.lock at ${p} is not a lock object`); err.code = 'ELOCKCORRUPT'; throw err; }
+  catch (e) { const err = new Error(`lock file at ${p} is present but unparseable: ${e.message}`); err.code = 'ELOCKCORRUPT'; throw err; }
+  if (!l || typeof l !== 'object' || Array.isArray(l)) { const err = new Error(`lock file at ${p} is not a lock object`); err.code = 'ELOCKCORRUPT'; throw err; }
   return { version: 1, ...l, skills: asSkills(l.skills) };
 }
 

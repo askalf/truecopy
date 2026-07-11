@@ -3,12 +3,12 @@
 // pairs with warden's runtime firewall: vet it → contain it.
 import { loadSkill, skillHash } from './skill.mjs';
 import { scanSkill, detectionInfo } from './scan.mjs';
-import { readLock, writeLock, DEFAULT_LOCK } from './lock.mjs';
+import { readLock, writeLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock } from './lock.mjs';
 import { signHash, verifyHashSig, keyId, ensureKey } from './sign.mjs';
 import { loadTrust, trustedSigner, trustKey, untrustKey, listTrust } from './trust.mjs';
 import { sha256, canonicalJson } from './hash.mjs';
 
-export { loadSkill, skillHash, scanSkill, detectionInfo, readLock, writeLock, DEFAULT_LOCK };
+export { loadSkill, skillHash, scanSkill, detectionInfo, readLock, writeLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock };
 export { signHash, verifyHashSig, keyId, ensureKey };
 export { loadTrust, trustedSigner, trustKey, untrustKey, listTrust };
 export { claudeSkillRoots, discoverClaudeSkills, discoverClaudePluginSkills, discoverMarketplaceSkills, resolveClaudeSkill } from './claude.mjs';
@@ -35,7 +35,7 @@ export function scan(source) {
 }
 
 /** Pin a vetted skill into the lock. Refuses to pin a flagged skill unless force. */
-export function pin(source, { lockPath = DEFAULT_LOCK, sign = false, force = false, name } = {}) {
+export function pin(source, { lockPath = resolveLock(), sign = false, force = false, name } = {}) {
   const skill = loadSkill(source);
   const s = scanSkill(skill);
   if (s.verdict === 'flagged' && !force) return { ok: false, reason: 'flagged', findings: s.findings, skill };
@@ -58,7 +58,7 @@ export function pin(source, { lockPath = DEFAULT_LOCK, sign = false, force = fal
  *  The guided mirror of `pin`: hand-deleting from a signed lock is exactly the
  *  manual editing canon exists to discourage. A no-op removal never writes (so it
  *  can't create an empty lock), and a corrupt lock still fails CLOSED via readLock. */
-export function unpin(name, { lockPath = DEFAULT_LOCK } = {}) {
+export function unpin(name, { lockPath = resolveLock() } = {}) {
   const lock = readLock(lockPath);
   if (!(name in lock.skills)) return 0;
   delete lock.skills[name];
@@ -69,7 +69,7 @@ export function unpin(name, { lockPath = DEFAULT_LOCK } = {}) {
 /** Re-derive every pinned skill and classify it against the lock.
  *  Fails CLOSED on a missing or corrupt lock — a present-but-empty lock stays
  *  ok:true (legitimately nothing pinned). */
-export function verify({ lockPath = DEFAULT_LOCK, trustPath, requireSigned = false } = {}) {
+export function verify({ lockPath = resolveLock(), trustPath, requireSigned = false } = {}) {
   let lock;
   try { lock = readLock(lockPath, { mustExist: true }); }
   catch (e) { return { ok: false, error: e.message, results: [] }; }
@@ -129,7 +129,7 @@ function verifyOne(name, entry, trust) {
 }
 
 /** What changed in a source since it was pinned. */
-export function diff(source, { lockPath = DEFAULT_LOCK, name } = {}) {
+export function diff(source, { lockPath = resolveLock(), name } = {}) {
   const skill = loadSkill(source);
   const key = name || skill.name;
   const entry = readLock(lockPath).skills[key];

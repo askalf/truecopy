@@ -11,8 +11,24 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadKey, keyId } from './sign.mjs';
 
-export const DEFAULT_REPO_TRUST = 'canon.trust';
+// The repo-committed trust file was `canon.trust` before the rename. New writes
+// go to `truecopy.trust`, but an existing `canon.trust` is still read and written
+// (see resolveRepoTrust) for back-compat. The private global store stays at
+// `~/.canon/trust.json` / `$CANON_HOME` — an internal path kept stable so a
+// user's existing trust decisions aren't lost by the rename.
+export const DEFAULT_REPO_TRUST = 'truecopy.trust';
+export const LEGACY_REPO_TRUST = 'canon.trust';
 const homeStore = () => path.join(process.env.CANON_HOME || os.homedir(), '.canon', 'trust.json');
+
+/** The repo trust file to read/write: prefer branded `truecopy.trust`, fall back
+ *  to an existing `canon.trust`, default to `truecopy.trust`. */
+export function resolveRepoTrust(cwd = process.cwd()) {
+  for (const name of [DEFAULT_REPO_TRUST, LEGACY_REPO_TRUST]) {
+    const p = path.join(cwd, name);
+    try { if (fs.existsSync(p)) return p; } catch {}
+  }
+  return path.join(cwd, DEFAULT_REPO_TRUST);
+}
 
 function readStore(file) {
   try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); return Array.isArray(j?.keys) ? j.keys : []; }
@@ -41,7 +57,7 @@ export function loadTrust({ trustPath, cwd = process.cwd() } = {}) {
   // key belongs in canon.trust if you want to verify what it signed.
   const self = loadKey({ envAllowed: false }); if (self) add({ name: 'self', publicKey: self.publicKey });
   for (const k of readStore(homeStore())) add(k);
-  for (const k of readStore(trustPath || path.join(cwd, DEFAULT_REPO_TRUST))) add(k);
+  for (const k of readStore(trustPath || resolveRepoTrust(cwd))) add(k);
   return map;
 }
 
@@ -54,7 +70,7 @@ export function trustedSigner(publicKey, trust) {
 
 /** Add a publisher public key to the trust set (global by default, or repo canon.trust). */
 export function trustKey(publicKey, name, { repo = false, cwd = process.cwd() } = {}) {
-  const file = repo ? path.join(cwd, DEFAULT_REPO_TRUST) : homeStore();
+  const file = repo ? resolveRepoTrust(cwd) : homeStore();
   const id = keyId(publicKey);
   if (!id) throw new Error('not a public key');
   const entry = { id, name: name || id.slice(0, 12), publicKey: String(publicKey).replace(/\r\n/g, '\n').trim() };

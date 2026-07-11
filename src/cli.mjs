@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { scan, pin, unpin, verify, diff, readLock, ensureKey, keyId, trustKey, untrustKey, listTrust, loadSkill, skillHash, scanSkill } from './index.mjs';
+import { scan, pin, unpin, verify, diff, readLock, resolveLock, ensureKey, keyId, trustKey, untrustKey, listTrust, loadSkill, skillHash, scanSkill } from './index.mjs';
 import { discoverClaudeSkills, discoverClaudePluginSkills, discoverMarketplaceSkills, resolveClaudeSkill } from './claude.mjs';
 
 // This build's version — so `hook install` can PIN the gate command to a git tag
@@ -34,7 +34,9 @@ const sources = (() => {
   }
   return out;
 })();
-const lockPath = opt('--lock', 'canon.lock');
+// Default lock: prefer truecopy.lock, transparently fall back to an existing
+// canon.lock (pre-rename repos), else write truecopy.lock. `--lock` overrides.
+const lockPath = resolveLock(opt('--lock', null) || null);
 const optTrust = () => { const t = opt('--trust', undefined); return typeof t === 'string' ? t : undefined; };
 // `--json` — machine-readable output for scan/verify/list/diff: one JSON document
 // on stdout, no ANSI, and the SAME exit codes (the CI gate contract is the exit
@@ -69,39 +71,42 @@ const mark = { ok: c(C.grn, '✓'), clean: c(C.grn, '✓'), flagged: c(C.red, '�
 const findingLine = (f) => `      ${c(C.red, '☠')} ${f.tool}: ${f.flags.join('; ')}`;
 
 function usage() {
-  out(`${c(C.bold, 'canon')} — own your agent skills · vet · sign · pin · verify
+  out(`${c(C.bold, 'truecopy')} — own your agent skills · vet · sign · pin · verify
 
-  canon scan <source...>            poison-scan a skill / MCP manifest / directory
-  canon add  <source...> [--sign]   vet + pin into ${lockPath} (refuses poisoned unless --force)
-  canon scan --claude               poison-scan every Claude Code skill (.claude/skills, project + user)
-  canon add  --claude [--sign]      vet + pin them all
-  canon scan --claude-plugins       …and every skill shipped by installed marketplace plugins
-  canon add  --claude-plugins       vet + pin those under their \`plugin:skill\` invocation name
-  canon scan --marketplace <dir>    poison-scan a CLONED marketplace or plugin repo (you fetch, canon scans)
-  canon verify [--lock <file>] [--trust <file>] [--require-signed]   re-check every pinned skill
+  truecopy scan <source...>            poison-scan a skill / MCP manifest / directory
+  truecopy add  <source...> [--sign]   vet + pin into ${lockPath} (refuses poisoned unless --force)
+  truecopy scan --claude               poison-scan every Claude Code skill (.claude/skills, project + user)
+  truecopy add  --claude [--sign]      vet + pin them all
+  truecopy scan --claude-plugins       …and every skill shipped by installed marketplace plugins
+  truecopy add  --claude-plugins       vet + pin those under their \`plugin:skill\` invocation name
+  truecopy scan --marketplace <dir>    poison-scan a CLONED marketplace or plugin repo (you fetch, truecopy scans)
+  truecopy verify [--lock <file>] [--trust <file>] [--require-signed]   re-check every pinned skill
                                     for drift / poisoning (--require-signed: also fail any entry
                                     without a valid signature from a trusted key)
-  canon diff <source> [--name <n>]  show what changed since it was pinned
-  canon list                        show the pinned set
-  canon remove <name...>            un-pin a skill — drop its ${lockPath} entry (alias: unpin)
-  canon guard [--lock <file>] [--require-signed] -- <cmd...>   verify the lock, then run <cmd> only if it's clean
+  truecopy diff <source> [--name <n>]  show what changed since it was pinned
+  truecopy list                        show the pinned set
+  truecopy remove <name...>            un-pin a skill — drop its ${lockPath} entry (alias: unpin)
+  truecopy guard [--lock <file>] [--require-signed] -- <cmd...>   verify the lock, then run <cmd> only if it's clean
   …scan / verify / list / diff take --json: machine-readable stdout, same exit codes
 
-  canon key                         print this machine's public key + id (share it to be trusted)
-  canon trust add <pubkey> --name <who> [--repo]   trust a publisher's key (--repo → commit it to canon.trust)
-  canon trust list                  show the trusted signing keys
-  canon trust remove <id>           stop trusting a key
+  truecopy key                         print this machine's public key + id (share it to be trusted)
+  truecopy trust add <pubkey> --name <who> [--repo]   trust a publisher's key (--repo → commit it to truecopy.trust)
+  truecopy trust list                  show the trusted signing keys
+  truecopy trust remove <id>           stop trusting a key
 
-  canon hook claude [--strict]      Claude Code PreToolUse hook: block a pinned skill that
+  truecopy hook claude [--strict]      Claude Code PreToolUse hook: block a pinned skill that
                                     drifted or turned poisonous at the moment it's invoked
                                     (--strict: only pinned skills may run at all)
-  canon hook install [--strict] [--user] [--settings <file>]
+  truecopy hook install [--strict] [--user] [--settings <file>]
                                     wire that hook into .claude/settings.json (idempotent;
                                     project file by default, --user for ~/.claude)
 
-  canon-mcp [--lock] [--name] [--strict] -- <mcp-server cmd...>
+  truecopy-mcp [--lock] [--name] [--strict] -- <mcp-server cmd...>
                                     enforce the lock on a LIVE MCP server: only vetted,
                                     unmodified, unpoisoned tools reach the client
+
+  \`canon\` / \`canon-mcp\` remain as back-compat aliases, and an existing canon.lock /
+  canon.trust is read automatically (new pins write truecopy.lock / truecopy.trust).
 
   Exit 1 on any flagged / drifted / poisoned result — drop it in CI.`);
 }
@@ -285,7 +290,7 @@ function runTrust() {
     try {
       const repo = !!opt('--repo', false);
       const r = trustKey(pub, opt('--name', undefined), { repo });
-      out(`${mark.ok} trusted ${c(C.bold, r.name)} ${c(C.dim, r.id)}${repo ? c(C.dim, ' · canon.trust') : ''}`);
+      out(`${mark.ok} trusted ${c(C.bold, r.name)} ${c(C.dim, r.id)}${repo ? c(C.dim, ' · truecopy.trust') : ''}`);
       return 0;
     } catch (e) { out(`${c(C.red, '✗')} ${e.message}`); return 1; }
   }
@@ -329,12 +334,14 @@ function runHookClaude() {
     const name = payload.tool_input && payload.tool_input.skill;
     if (!name) return 0;
 
-    // lock: explicit --lock > <project>/canon.lock > ./canon.lock (hooks run in the project dir)
+    // lock: explicit --lock > truecopy.lock (project/cwd) > canon.lock (back-compat, project/cwd).
+    // Hooks run in the project dir; prefer the branded name, still honor a pre-rename canon.lock.
     const projectDir = process.env.CLAUDE_PROJECT_DIR || payload.cwd || process.cwd();
     const explicit = opt('--lock', undefined);
-    const candidates = typeof explicit === 'string' ? [explicit] : [path.join(projectDir, 'canon.lock'), 'canon.lock'];
+    const candidates = typeof explicit === 'string' ? [explicit]
+      : [path.join(projectDir, 'truecopy.lock'), 'truecopy.lock', path.join(projectDir, 'canon.lock'), 'canon.lock'];
     const lp = candidates.find((p) => fs.existsSync(p));
-    if (!lp) return strict ? deny(`no canon.lock — pin your skills first: canon add --claude`) : 0;
+    if (!lp) return strict ? deny(`no truecopy.lock — pin your skills first: truecopy add --claude`) : 0;
 
     let lock;
     try { lock = readLock(lp, { mustExist: true }); }

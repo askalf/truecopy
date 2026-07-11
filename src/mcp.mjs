@@ -7,7 +7,7 @@
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import { gateTools, toolHash } from './gate.mjs';
-import { readLock } from './lock.mjs';
+import { readLock, resolveLock } from './lock.mjs';
 
 const blockReply = (id, name) =>
   JSON.stringify({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `⛔ canon blocked an un-vetted / drifted tool: ${name}` }], isError: true } });
@@ -79,8 +79,8 @@ export function pickEntry(lock, name) {
 }
 
 /** Spawn the downstream server and wire the two gated streams together. */
-export function runGate({ command, args = [], lockPath = 'canon.lock', name = null, strict = false, onWarn } = {}) {
-  const warn = onWarn || ((m) => process.stderr.write('[canon] ' + m + '\n'));
+export function runGate({ command, args = [], lockPath = resolveLock(), name = null, strict = false, onWarn } = {}) {
+  const warn = onWarn || ((m) => process.stderr.write('[truecopy] ' + m + '\n'));
   const entry = pickEntry(readLock(lockPath), name);
   if (!entry) warn(`no pinned ${name ? '"' + name + '" ' : ''}MCP entry in ${lockPath} — every tool will be treated as unvetted (canon add it first)`);
   const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'inherit'] });

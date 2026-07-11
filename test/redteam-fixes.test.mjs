@@ -138,7 +138,7 @@ test('finding 7: verify fails closed on a missing lock', () => {
   const dir = mkdir();
   const v = verify({ lockPath: path.join(dir, 'NOPE-missing.lock') });
   assert.equal(v.ok, false, 'a missing lock must not verify ok');
-  assert.ok(v.error && /no canon\.lock/.test(v.error), 'error names the missing lock');
+  assert.ok(v.error && /no lock file/.test(v.error), 'error names the missing lock');
   assert.equal(v.results.length, 0);
 });
 

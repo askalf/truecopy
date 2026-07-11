@@ -95,7 +95,7 @@ test('hook: non-Skill tools and missing lock pass through (default); missing loc
   assert.equal(hook(skillCall('good'), { lock: path.join(baseDir, 'nope.lock') }).status, 0);
   const r = hook(skillCall('good'), { lock: path.join(baseDir, 'nope.lock'), strict: true });
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /no canon.lock/);
+  assert.match(r.stderr, /no truecopy.lock/);
 });
 
 test('hook: a corrupt lock fails CLOSED in both modes', () => {

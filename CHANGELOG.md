@@ -4,6 +4,19 @@ All notable changes to **@askalf/truecopy** are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-07-11
+
+### Changed
+- **Default lock/trust filenames are now `truecopy.lock` / `truecopy.trust`**
+  (were `canon.lock` / `canon.trust`), finishing the canon→truecopy rename inside
+  the tool: the CLI help, `truecopy-mcp`, and the Claude Code hook all say
+  *truecopy* now. **Fully back-compatible** — with no `--lock`, an existing
+  `canon.lock` (or `canon.trust`) is transparently read, so a repo pinned before
+  the rename keeps verifying with zero changes; only a *fresh* pin writes the
+  branded name. The `canon` / `canon-mcp` bin aliases, the `~/.canon` global trust
+  store, and the `CANON_*` env vars are all unchanged. (Unblocks fixing the CI
+  action, whose docs already document `truecopy.lock`.)
+
 ## [0.7.0] - 2026-07-11
 
 A security-hardening release following a full adversarial audit of the gate:
