@@ -168,6 +168,12 @@ Trust comes from three sources, unioned: your own machine's key (implicit, so a 
 - run: npx -y github:askalf/truecopy verify --json > truecopy-report.json   # same gate, machine-readable — feed a dashboard / PR comment (scan, list, diff take --json too)
 ```
 
+**Require signatures where trust matters.** By default `verify` accepts an unsigned entry whose bytes match — signing only helps if you also *look* at the lock diff. Add **`--require-signed`** (to `verify` or `guard`) and any entry without a valid signature from a **trusted key** fails closed, so a lock substitution that strips the signature and swaps in other clean-scanning bytes can't pass. Pair it with a committed `truecopy.trust`:
+
+```yaml
+- run: npx -y github:askalf/truecopy verify --require-signed   # every pinned skill must be signed by a trusted publisher
+```
+
 **Sign in CI, not on laptops.** Hold the private signing key as a single CI secret instead of scattering it across developer machines. Set **`CANON_SIGNING_KEY`** to the private key (a raw ed25519 PEM, or base64-encoded) — truecopy derives the public key from it, so signing needs no `~/.truecopy` file and no keychain, and the key keeps the same `keyId`:
 
 ```yaml

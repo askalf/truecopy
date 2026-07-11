@@ -73,11 +73,13 @@ function usage() {
   canon scan --claude-plugins       …and every skill shipped by installed marketplace plugins
   canon add  --claude-plugins       vet + pin those under their \`plugin:skill\` invocation name
   canon scan --marketplace <dir>    poison-scan a CLONED marketplace or plugin repo (you fetch, canon scans)
-  canon verify [--lock <file>] [--trust <file>]   re-check every pinned skill for drift / poisoning
+  canon verify [--lock <file>] [--trust <file>] [--require-signed]   re-check every pinned skill
+                                    for drift / poisoning (--require-signed: also fail any entry
+                                    without a valid signature from a trusted key)
   canon diff <source> [--name <n>]  show what changed since it was pinned
   canon list                        show the pinned set
   canon remove <name...>            un-pin a skill — drop its ${lockPath} entry (alias: unpin)
-  canon guard [--lock <file>] -- <cmd...>   verify the lock, then run <cmd> only if it's clean
+  canon guard [--lock <file>] [--require-signed] -- <cmd...>   verify the lock, then run <cmd> only if it's clean
   …scan / verify / list / diff take --json: machine-readable stdout, same exit codes
 
   canon key                         print this machine's public key + id (share it to be trusted)
@@ -145,7 +147,7 @@ function runAdd() {
 }
 
 function runVerify() {
-  const { ok, results, error } = verify({ lockPath, trustPath: optTrust() });
+  const { ok, results, error } = verify({ lockPath, trustPath: optTrust(), requireSigned: !!opt('--require-signed', false) });
   // the library return IS the documented shape — emit it verbatim (incl. `error`
   // for a missing/corrupt lock, which keeps failing closed with exit 1)
   if (jsonOut) { out(JSON.stringify(error === undefined ? { ok, results } : { ok, results, error })); return ok ? 0 : 1; }
@@ -157,6 +159,7 @@ function runVerify() {
     out(`${mark[r.status] || '?'} ${c(C.bold, r.name)}  ${r.status}${sig}${acc}`);
     if (r.status === 'drifted') out(c(C.dim, `      ${summary(r)}`));
     if (r.status === 'untrusted') out(c(C.dim, `      key ${r.keyId} not trusted — canon trust add <pubkey> --name <publisher>`));
+    if (r.requiredSignature) out(c(C.dim, `      --require-signed: no trusted signature — sign it (canon add --sign) and trust the key`));
     if (r.status === 'poisoned') {
       r.findings.forEach((f) => out(findingLine(f)));
       // the single most confusing verify outcome, disambiguated: the bytes did not
@@ -218,7 +221,7 @@ function runRemove() {
 
 function runGuard() {
   if (!post.length) { out('usage: canon guard [--lock <file>] -- <command...>'); return 2; }
-  const { ok, results, error } = verify({ lockPath, trustPath: optTrust() });
+  const { ok, results, error } = verify({ lockPath, trustPath: optTrust(), requireSigned: !!opt('--require-signed', false) });
   if (error) { out(`${c(C.red, '⛔ canon: refusing to launch —')} ${error}`); return 1; }
   if (!ok) {
     const bad = results.filter((r) => r.status !== 'ok');
