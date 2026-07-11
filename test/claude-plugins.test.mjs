@@ -63,10 +63,16 @@ test('hook gates a pinned plugin skill: clean allows, drift blocks', () => {
   const lock = path.join(baseDir, 'p2.lock');
   assert.equal(run(['add', '--claude-plugins', '--lock', lock]).status, 0);
   assert.equal(run(['hook', 'claude', '--lock', lock], { input: skillCall('toolkit:helper') }).status, 0);
-  fs.appendFileSync(path.join(amktHelper, 'SKILL.md'), '\n(silent update)\n');
-  const r = run(['hook', 'claude', '--lock', lock], { input: skillCall('toolkit:helper') });
-  assert.equal(r.status, 2);
-  assert.match(r.stderr, /DRIFTED/);
+  const skillMd = path.join(amktHelper, 'SKILL.md');
+  const original = fs.readFileSync(skillMd, 'utf8');
+  try {
+    fs.appendFileSync(skillMd, '\n(silent update)\n');
+    const r = run(['hook', 'claude', '--lock', lock], { input: skillCall('toolkit:helper') });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /DRIFTED/);
+  } finally {
+    fs.writeFileSync(skillMd, original); // restore in finally so a failure can't drift the shared fixture for later tests
+  }
 });
 
 test('hook strict blocks an unresolvable plugin form; unpinned plugin form passes by default', () => {

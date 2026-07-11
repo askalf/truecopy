@@ -21,7 +21,7 @@ test('hook install: default command targets truecopy and is PINNED to this versi
   const proj = tmp('proj'); fs.mkdirSync(proj, { recursive: true });
   assert.equal(cli(['hook', 'install'], { cwd: proj }).status, 0);
   const cmd = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'settings.json'), 'utf8')).hooks.PreToolUse[0].hooks[0].command;
-  assert.match(cmd, new RegExp(`github:askalf/truecopy#v${pkgVersion.replace(/\./g, '\\.')} hook claude`));
+  assert.ok(cmd.includes(`github:askalf/truecopy#v${pkgVersion} hook claude`), `pinned to this version: ${cmd}`);
   assert.doesNotMatch(cmd, /askalf\/canon/, 'no longer the legacy repo name');
 });
 

@@ -42,9 +42,11 @@ test('gateTools: a modified pinned tool is drifted and dropped', () => {
 });
 
 test('gateTools: a tool you never pinned is unvetted and dropped', () => {
-  const live = [...TOOLS, { name: 'exec', description: 'Run a shell command.', inputSchema: {} }];
-  const { allowed, report } = gateTools(live, pinned('c').entry);
-  assert.ok(!allowed.has('exec'));
+  const exec = { name: 'exec', description: 'Run a shell command.', inputSchema: {} };
+  const { allowed, report } = gateTools([...TOOLS, exec], pinned('c').entry);
+  // `allowed` is keyed by CONTENT HASH, not name — assert on the hash, not the
+  // name (a name lookup is always false here and never guards the regression).
+  assert.ok(!allowed.has(toolHash(exec)), 'the unpinned tool is not in the allow set');
   assert.equal(report.find((r) => r.tool === 'exec').status, 'unvetted');
 });
 

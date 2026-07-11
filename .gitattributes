@@ -1,0 +1,5 @@
+# Keep truecopy's own tree LF everywhere. Skill content is hashed byte-exact
+# (CRLF != LF — see loadSkillDir), so a committed truecopy.lock's hashes stay
+# stable across contributor OSes only if the bytes don't get rewritten by git's
+# autocrlf. `text=auto` still auto-detects binary fixtures and leaves them alone.
+* text=auto eol=lf
