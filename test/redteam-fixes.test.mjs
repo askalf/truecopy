@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 // Isolate the signing key in a temp CANON_HOME before any signing test runs.
 process.env.CANON_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-rt-home-'));
+process.env.CANON_NO_KEYCHAIN = '1'; // never touch the real OS keychain (would clobber a dev's genuine key + race the suite)
 import { scan, pin, verify, diff, readLock } from '../src/index.mjs';
 import { gateTools, toolHash } from '../src/gate.mjs';
 import { inspectServer, inspectClient } from '../src/mcp.mjs';

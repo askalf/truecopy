@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 // writes can't be pre-empted by a symlink planted at a predictable os.tmpdir() path.
 const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-json-test-'));
 process.env.CANON_HOME = path.join(baseDir, 'home'); // isolate the signing key
+process.env.CANON_NO_KEYCHAIN = '1'; // never touch the real OS keychain (would clobber a dev's genuine key + race the suite)
 import { pin } from '../src/index.mjs';
 
 const CLI = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));

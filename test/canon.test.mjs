@@ -8,6 +8,7 @@ import path from 'node:path';
 // a predictable os.tmpdir() path.
 const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-test-'));
 process.env.CANON_HOME = path.join(baseDir, 'home'); // isolate the signing key
+process.env.CANON_NO_KEYCHAIN = '1'; // never touch the real OS keychain (would clobber a dev's genuine key + race the suite)
 import { scan, pin, verify, diff } from '../src/index.mjs';
 
 const tmp = (n) => path.join(baseDir, n);

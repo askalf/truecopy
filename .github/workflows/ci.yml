@@ -13,6 +13,11 @@ jobs:
   test:
     name: test (${{ matrix.os }}, ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
+    # Signing tests must never reach the runner's real OS keychain (macOS
+    # `security`, Linux secret-tool). keychain.test.mjs manages this per-test via
+    # the fake seam and overrides it where it needs the keychain-present path.
+    env:
+      CANON_NO_KEYCHAIN: '1'
     strategy:
       fail-fast: false
       matrix:

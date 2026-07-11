@@ -10,6 +10,7 @@ import path from 'node:path';
 // Isolate the trust store + signing key under a private temp CANON_HOME.
 const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-trust-'));
 process.env.CANON_HOME = path.join(baseDir, 'home');
+process.env.CANON_NO_KEYCHAIN = '1'; // never touch the real OS keychain (would clobber a dev's genuine key + race the suite)
 import { pin, verify, readLock, writeLock, signHash, keyId, trustKey, untrustKey } from '../src/index.mjs';
 
 const tmp = (n) => path.join(baseDir, n);
