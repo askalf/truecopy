@@ -52,16 +52,26 @@ function walk(dir, out = []) {
 }
 
 function loadSkillDir(source) {
-  const files = walk(source).sort();
-  const entries = files.map((f) => ({
-    path: path.relative(source, f).replace(/\\/g, '/'),
-    hash: sha256(fs.readFileSync(f)),
+  // Sort by the PORTABLE forward-slash relative path, not the native full path.
+  // Array order goes into hashInput, and native paths collate by separator: '\'
+  // (0x5C) sorts after digits while '/' (0x2F) sorts before them, so sibling dirs
+  // where one name prefixes another ('lib/' vs 'lib2/') flip order on Windows vs
+  // POSIX — the SAME bytes then hash differently across OSes, and a committed lock
+  // verifies `drifted` (with an empty parts diff) on the other machine. Sorting the
+  // relative path makes the identity separator-independent; POSIX hashes are
+  // unchanged (their native path already == the relative path), Windows now matches.
+  const files = walk(source)
+    .map((full) => ({ full, path: path.relative(source, full).replace(/\\/g, '/') }))
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const entries = files.map(({ full, path: rel }) => ({
+    path: rel,
+    hash: sha256(fs.readFileSync(full)),
   }));
   // scan every non-binary file — that's where poisoned prompts hide, and an
   // attacker will pick whatever extension the scanner ignores
   const scanText = files
-    .filter((f) => !BINARY_EXT.test(f))
-    .map((f) => decodeForScan(fs.readFileSync(f)))
+    .filter(({ full }) => !BINARY_EXT.test(full))
+    .map(({ full }) => decodeForScan(fs.readFileSync(full)))
     .join('\n');
   return {
     source, kind: 'skill', name: path.basename(source.replace(/[\\/]$/, '')),
