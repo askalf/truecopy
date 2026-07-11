@@ -15,7 +15,7 @@ Agents install tools from places you don't control — MCP servers, skill market
 - **verifies** on every run / in CI that nothing **drifted** — a pinned skill whose bytes changed is a silent update or a supply-chain attack, and `truecopy verify` exits non-zero before it loads
 - **diffs** exactly what changed since you trusted it
 
-Deterministic and offline. truecopy shares **[warden](https://github.com/askalf/warden)**'s detection — so the two are a pair, not a duplicate: **truecopy vets the tool (provenance); warden contains the call (runtime).** *Vet it → contain it.*
+Deterministic and offline. truecopy shares **[redstamp](https://github.com/askalf/redstamp)**'s detection — so the two are a pair, not a duplicate: **truecopy vets the tool (provenance); redstamp contains the call (runtime).** *Vet it → contain it.*
 
 ## Install
 
@@ -74,7 +74,7 @@ A silently-added, drifted, or poisoned tool is stripped from `tools/list` (the a
 truecopy guard -- npm start        # refuses to launch (exit 1) if any pinned skill drifted or turned poisonous
 ```
 
-So truecopy spans the whole lifecycle: **scan → pin → verify (CI) → enforce (runtime).** Where [warden](https://github.com/askalf/warden) firewalls what a tool *does*, truecopy-mcp gates which tools *exist*.
+So truecopy spans the whole lifecycle: **scan → pin → verify (CI) → enforce (runtime).** Where [redstamp](https://github.com/askalf/redstamp) firewalls what a tool *does*, truecopy-mcp gates which tools *exist*.
 
 ## Gate Claude Code skills
 
@@ -199,7 +199,7 @@ verify();                                 // { ok, results: [{ name, status: 'ok
 
 ## The agent-security stack
 
-Three composable layers, one defense: **[warden](https://github.com/askalf/warden)** contains the call · **[truecopy](https://github.com/askalf/truecopy)** vets the tool *(you are here)* · **[keeper](https://github.com/askalf/keeper)** holds the keys. Run all three together → **[agent-security-stack](https://github.com/askalf/agent-security-stack)**.
+Three composable layers, one defense: **[redstamp](https://github.com/askalf/redstamp)** contains the call · **[truecopy](https://github.com/askalf/truecopy)** vets the tool *(you are here)* · **[strongroom](https://github.com/askalf/strongroom)** holds the keys. Run all three together → **[agent-security-stack](https://github.com/askalf/agent-security-stack)**.
 
 ---
 Part of **[Own Your Stack](https://github.com/askalf)** — own your AI infrastructure instead of renting it. Built by Thomas Sprayberry.
