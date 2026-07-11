@@ -53,6 +53,18 @@ export function pin(source, { lockPath = DEFAULT_LOCK, sign = false, force = fal
   return { ok: true, name: key, hash, verdict: s.verdict, signed: sign, skill, advisories: s.advisories?.length || 0 };
 }
 
+/** Un-pin a skill — remove its lock entry by exact name. → count removed (0 or 1).
+ *  The guided mirror of `pin`: hand-deleting from a signed lock is exactly the
+ *  manual editing canon exists to discourage. A no-op removal never writes (so it
+ *  can't create an empty lock), and a corrupt lock still fails CLOSED via readLock. */
+export function unpin(name, { lockPath = DEFAULT_LOCK } = {}) {
+  const lock = readLock(lockPath);
+  if (!(name in lock.skills)) return 0;
+  delete lock.skills[name];
+  writeLock(lock, lockPath);
+  return 1;
+}
+
 /** Re-derive every pinned skill and classify it against the lock.
  *  Fails CLOSED on a missing or corrupt lock — a present-but-empty lock stays
  *  ok:true (legitimately nothing pinned). */

@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { scan, pin, verify, diff, readLock, ensureKey, keyId, trustKey, untrustKey, listTrust, loadSkill, skillHash, scanSkill } from './index.mjs';
+import { scan, pin, unpin, verify, diff, readLock, ensureKey, keyId, trustKey, untrustKey, listTrust, loadSkill, skillHash, scanSkill } from './index.mjs';
 import { discoverClaudeSkills, discoverClaudePluginSkills, discoverMarketplaceSkills, resolveClaudeSkill } from './claude.mjs';
 
 const argv = process.argv.slice(2);
@@ -72,6 +72,7 @@ function usage() {
   canon verify [--lock <file>] [--trust <file>]   re-check every pinned skill for drift / poisoning
   canon diff <source> [--name <n>]  show what changed since it was pinned
   canon list                        show the pinned set
+  canon remove <name...>            un-pin a skill — drop its ${lockPath} entry (alias: unpin)
   canon guard [--lock <file>] -- <cmd...>   verify the lock, then run <cmd> only if it's clean
 
   canon key                         print this machine's public key + id (share it to be trusted)
@@ -169,6 +170,18 @@ function runList() {
   for (const n of names) {
     const e = lock.skills[n];
     out(`${c(C.grn, '●')} ${c(C.bold, n)} ${c(C.dim, `${e.kind} · ${e.hash.slice(0, 12)} · ${e.scannedAt.slice(0, 10)}${e.sig ? ' · signed' : ''}`)}`);
+  }
+  return 0;
+}
+
+// The lock lifecycle's other half: `add` pins, `remove` un-pins. Names are lock
+// keys matched exactly (no disk access), so removing an already-uninstalled skill
+// works. Idempotent — a missing name is a notice, not a failure — so CI can call it.
+function runRemove() {
+  if (!sources.length) { out(`usage: canon remove <name...> [--lock <file>]`); return 2; }
+  for (const name of sources) {
+    const n = unpin(name, { lockPath });
+    out(n ? `${mark.ok} removed ${c(C.bold, name)}` : c(C.dim, `no matching entry: ${name}`));
   }
   return 0;
 }
@@ -332,7 +345,7 @@ function runHook() {
   return 2;
 }
 
-const table = { scan: runScan, add: runAdd, verify: runVerify, diff: runDiff, list: runList, guard: runGuard, key: runKey, trust: runTrust, hook: runHook };
+const table = { scan: runScan, add: runAdd, remove: runRemove, unpin: runRemove, verify: runVerify, diff: runDiff, list: runList, guard: runGuard, key: runKey, trust: runTrust, hook: runHook };
 if (!cmd || cmd === '-h' || cmd === '--help' || !table[cmd]) { usage(); process.exit(cmd && cmd !== '-h' && cmd !== '--help' ? 2 : 0); }
 try { process.exit(table[cmd]()); }
 catch (e) { process.stderr.write(`canon: ${e && e.message || e}\n`); process.exit(1); }
