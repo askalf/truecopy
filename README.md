@@ -1,8 +1,10 @@
 # truecopy
 
-[![marketplace watch](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json)](https://github.com/askalf/truecopy/blob/watch/WATCH.md) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge)](https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy)
+[![npm](https://img.shields.io/npm/v/%40askalf%2Ftruecopy?label=npm)](https://www.npmjs.com/package/@askalf/truecopy) [![GitHub Marketplace](https://img.shields.io/badge/marketplace-truecopy--action-6f42c1?logo=github)](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills) [![marketplace watch](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json)](https://github.com/askalf/truecopy/blob/watch/WATCH.md) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge)](https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy)
 
 > _truecopy — **own your agent skills**. Vet, sign, and pin every skill & MCP server before it runs. Part of **[Own Your Stack](https://github.com/askalf)** — own your AI infrastructure instead of renting it by the token._
+
+**Proven at ecosystem scale:** truecopy has poison-scanned **68,560 skills** — the full official Claude Code plugin directory ([2,019 skills, zero poisoned](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain)) and the entire ClawHub registry, the marketplace whose poisoning incident started the category ([66,541 skills, zero confirmed malicious](https://sprayberrylabs.com/blog/the-marketplace-that-started-the-panic)). A [standing watch](https://github.com/askalf/truecopy/blob/watch/WATCH.md) re-audits all 255 official plugins **every Monday** and publishes the verdict — that's the live badge above. And the gate eats its own cooking: this repo pins its own demo manifest in [`truecopy.lock`](truecopy.lock) and verifies it on every PR with [truecopy-action](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills).
 
 > _**Formerly `canon`.** Renamed to `truecopy` — a certified true copy — for the npm release; the GitHub repo redirects and the legacy `canon`/`canon-mcp` CLI aliases keep working._
 
@@ -96,7 +98,7 @@ truecopy scan --marketplace ./clone     # audit a marketplace or plugin repo you
   "hooks": {
     "PreToolUse": [
       { "matcher": "Skill",
-        "hooks": [{ "type": "command", "command": "npx -y github:askalf/truecopy#v0.6.2 hook claude", "timeout": 20 }] }
+        "hooks": [{ "type": "command", "command": "npx -y github:askalf/truecopy#v0.8.0 hook claude", "timeout": 20 }] }
     ]
   }
 }
@@ -158,6 +160,18 @@ truecopy verify                               # ✓ filesystem  ok · signed by 
 Trust comes from three sources, unioned: your own machine's key (implicit, so a local `--sign` round-trips with no extra step), a user-global `~/.truecopy/trust.json`, and a repo-committed **`truecopy.trust`**. Commit `truecopy.trust` and a teammate's checkout — or your CI — verifies the publisher's signature with zero setup. Still deterministic and offline: no transparency log, no network.
 
 ## In CI
+
+**One line, from the [GitHub Marketplace](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills)** — verify the committed lock, or poison-scan sources without one:
+
+```yaml
+- uses: askalf/truecopy-action@v1             # verify truecopy.lock — fails the build on drift / poisoning
+- uses: askalf/truecopy-action@v1             # …or scan-mode: vet a marketplace / manifest with no lock needed
+  with:
+    command: scan
+    marketplace: ./the-repo-you-cloned
+```
+
+This repo runs exactly that gate on itself — see [`truecopy-gate.yml`](.github/workflows/truecopy-gate.yml).
 
 > On npm as `@askalf/truecopy` — the snippets below use the GitHub form, but `npx -y @askalf/truecopy verify` works the same.
 
