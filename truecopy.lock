@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "skills": {
+    "filesystem": {
+      "source": "demo/clean-mcp.json",
+      "kind": "mcp",
+      "hash": "a881946cef3fb45d7c78d3297070a179f4c55ba65f00a576ada922c39f4e1f57",
+      "scannedAt": "2026-07-16T17:25:56.559Z",
+      "verdict": "clean",
+      "findings": 0,
+      "detection": {
+        "engine": "redstamp",
+        "version": "0.4.1"
+      },
+      "parts": {
+        "read_file": "cfe9acc21dbc05b0b8baa751e71fe524fd8fa15578d20610fc90b8d533bd8d8f",
+        "list_directory": "ac606087a4a47e23d801beb12699d87364430677f04b6709eacbaec062156227",
+        "(manifest)": "cac4676bf307456c45dfa470fa0b350b6b305b0d3cb86ffc3b68396625261b46"
+      }
+    }
+  }
+}
