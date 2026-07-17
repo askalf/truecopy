@@ -4,6 +4,26 @@ All notable changes to **@askalf/truecopy** are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-07-17
+
+### Added
+- **`truecopy check-manifest <file>`** — compare every installed marketplace
+  plugin skill against a watch manifest (name → skill hash). An installed skill
+  whose bytes differ from what the watch scanned is `drifted`, a watch-flagged
+  skill fails even byte-identical, and skills the manifest doesn't know are
+  `unlisted` (reported, never fatal). Exit 1 on any failure; takes `--json`.
+  Offline: you fetch the manifest, truecopy only reads it.
+- **The weekly marketplace watch publishes `directory-manifest.json`** on the
+  `watch` branch — name → hash for every scanned skill in the official Claude
+  Code plugin directory, plus the currently-flagged names. This is the manifest
+  `check-manifest` consumes: our standing vetting of the directory, as a
+  drop-in check for any machine that installs from it.
+- **Per-file acceptance granularity for the watch** (#68): accept entries can
+  key a reviewed-benign finding to the finding-bearing files instead of the
+  whole-skill hash, so upstream docs churn no longer lapses a review. Skill
+  dirs now expose `scanPieces` (per-file scan text) to support subset re-scans;
+  scan targets, verdicts, and hashes are unchanged.
+
 ## [0.8.0] - 2026-07-11
 
 ### Changed

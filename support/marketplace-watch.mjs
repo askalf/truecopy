@@ -103,9 +103,15 @@ if (corpusMode) {
 const flaggedRows = [];
 const acceptedRows = [];
 const advisoryRows = [];
+// name → skillHash for EVERY scanned skill, published as directory-manifest.json
+// so `truecopy check-manifest` can compare a machine's installed plugin skills
+// against exactly the bytes this watch scanned. Null-proto: catalog names are
+// validated but 'constructor'-shaped ones must stay plain data keys.
+const manifestSkills = Object.create(null);
 let advisoryCount = 0;
 for (const s of skills) {
   const r = scan(s.dir);
+  manifestSkills[s.name] = skillHash(r.skill);
   const advisories = (r.advisories || []).map((f) => `${f.tool}: ${f.flags.join('; ')}`);
   advisoryCount += advisories.length;
   if (r.verdict !== 'clean') {
@@ -131,6 +137,18 @@ write('badge.json', JSON.stringify({
   message: `${plugins} plugins · ${skills.length} skills · ${poisoned} poisoned · ${advisoryCount} advisories`,
   color: poisoned ? 'red' : (fetchErrors.length ? 'orange' : 'brightgreen'),
 }) + '\n');
+
+// The consumable artifact: what the watch scanned, as name → hash. `flagged`
+// rides along so a byte-identical install of a poisoned skill still fails
+// check-manifest (a hash match is not an endorsement).
+write('directory-manifest.json', JSON.stringify({
+  schemaVersion: 1,
+  source: 'anthropics/claude-plugins-official',
+  scannedAt,
+  plugins,
+  skills: { ...manifestSkills },
+  flagged: flaggedRows.map((r) => r.name),
+}, null, 2) + '\n');
 
 write('results.json', JSON.stringify({
   ...summary,

@@ -86,6 +86,9 @@ function usage() {
   truecopy diff <source> [--name <n>]  show what changed since it was pinned
   truecopy list                        show the pinned set
   truecopy remove <name...>            un-pin a skill — drop its ${lockPath} entry (alias: unpin)
+  truecopy check-manifest <file>       compare every INSTALLED marketplace plugin skill against a
+                                    watch manifest (directory-manifest.json on the watch branch):
+                                    drifted-from-watched or watch-flagged fails; takes --json
   truecopy guard [--lock <file>] [--require-signed] -- <cmd...>   verify the lock, then run <cmd> only if it's clean
   …scan / verify / list / diff take --json: machine-readable stdout, same exit codes
 
@@ -241,6 +244,61 @@ function runRemove() {
     out(n ? `${mark.ok} removed ${c(C.bold, name)}` : c(C.dim, `no matching entry: ${name}`));
   }
   return 0;
+}
+
+// A watch manifest maps `plugin:skill` names to skill hashes — the weekly
+// marketplace watch publishes one for the official plugin directory
+// (directory-manifest.json on the watch branch). check-manifest compares every
+// INSTALLED marketplace plugin skill on this machine against it: same name +
+// same bytes as the watch scanned → `match`; same name, different bytes →
+// `drifted` (exit 1 — what's on disk is not what was scanned); a name the
+// manifest flagged as poisoned → `flagged` (exit 1 even byte-identical: match
+// is not endorsement); a name the manifest doesn't know → `unlisted` (reported,
+// never fatal — your own plugins and other marketplaces are normal). Manifest
+// skills that aren't installed here are ignored: the check is about what CAN
+// run on this machine. Offline like everything else — you fetch the manifest,
+// truecopy only reads it.
+function runCheckManifest() {
+  const file = sources[0];
+  if (!file) { out('usage: truecopy check-manifest <manifest.json>   (directory-manifest.json from the watch branch)'); return 2; }
+  let manifest;
+  try { manifest = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (e) { out(`${c(C.red, '✗')} unreadable manifest ${file}: ${e.message}`); return 2; }
+  const skills = manifest && typeof manifest.skills === 'object' && manifest.skills !== null && !Array.isArray(manifest.skills) ? manifest.skills : null;
+  if (!skills) { out(`${c(C.red, '✗')} ${file}: not a watch manifest (no "skills" name→hash map)`); return 2; }
+  const flaggedSet = new Set(Array.isArray(manifest.flagged) ? manifest.flagged.filter((n) => typeof n === 'string') : []);
+  const installed = discoverClaudePluginSkills();
+  let bad = 0;
+  const results = [];
+  for (const { name, dir, marketplace } of installed) {
+    let row;
+    try {
+      const hash = skillHash(loadSkill(dir));
+      // Object.hasOwn, not `in` / direct read: a hostile manifest can carry
+      // `__proto__`/`toString` keys, and a skill named after a prototype member
+      // must not read the inherited value as its "expected hash".
+      const expected = Object.hasOwn(skills, name) && typeof skills[name] === 'string' ? skills[name] : null;
+      const status = flaggedSet.has(name) ? 'flagged' : expected === null ? 'unlisted' : expected === hash ? 'match' : 'drifted';
+      row = { name, marketplace, status, hash, ...(expected && expected !== hash ? { expected } : {}) };
+    } catch (e) {
+      row = { name, marketplace, status: 'error', error: e.message }; // unreadable installed skill fails the gate — same posture as scan
+    }
+    if (row.status !== 'match' && row.status !== 'unlisted') bad++;
+    results.push(row);
+  }
+  const summary = { manifest: { scannedAt: manifest.scannedAt, skills: Object.keys(skills).length }, installed: installed.length, failing: bad };
+  if (jsonOut) out(JSON.stringify({ ...summary, results }));
+  else {
+    const markOf = { match: mark.ok, drifted: mark.drifted, flagged: mark.poisoned, unlisted: mark.unpinned, error: c(C.red, '✗') };
+    for (const r of results) {
+      const detail = r.status === 'drifted' ? c(C.dim, `  installed ${r.hash.slice(0, 12)} ≠ watched ${r.expected.slice(0, 12)}`)
+        : r.status === 'flagged' ? c(C.red, '  flagged poisoned by the watch — do not run')
+        : r.status === 'error' ? c(C.red, `  ${r.error}`) : '';
+      out(`${markOf[r.status]} ${c(C.bold, r.name)} ${c(C.dim, `(${r.marketplace})`)}  ${r.status}${detail}`);
+    }
+    out(c(C.dim, `${installed.length} installed plugin skills checked against ${Object.keys(skills).length} watched (manifest ${manifest.scannedAt || 'undated'})`));
+  }
+  return bad ? 1 : 0;
 }
 
 function runGuard() {
@@ -416,7 +474,7 @@ function runHook() {
   return 2;
 }
 
-const table = { scan: runScan, add: runAdd, remove: runRemove, unpin: runRemove, verify: runVerify, diff: runDiff, list: runList, guard: runGuard, key: runKey, trust: runTrust, hook: runHook };
+const table = { scan: runScan, add: runAdd, remove: runRemove, unpin: runRemove, verify: runVerify, diff: runDiff, list: runList, 'check-manifest': runCheckManifest, guard: runGuard, key: runKey, trust: runTrust, hook: runHook };
 if (!cmd || cmd === '-h' || cmd === '--help' || !table[cmd]) { usage(); process.exit(cmd && cmd !== '-h' && cmd !== '--help' ? 2 : 0); }
 try { process.exit(table[cmd]()); }
 catch (e) { process.stderr.write(`canon: ${e && e.message || e}\n`); process.exit(1); }
