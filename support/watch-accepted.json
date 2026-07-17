@@ -1,9 +1,9 @@
 {
   "agentforce-adlc:agentforce-generate": {
-    "hash": "551ada69fa206d78846aa758f14a603028a09925816d9cb9a7bb01bb30a8d348",
+    "hash": "bddf57157b63206f7c5ac2ea68321a71b316d7b259ffa9041eb3aa8ac762a833",
     "class": "security-testing fixtures",
-    "note": "Salesforce Agentforce docs ship attack strings as test payloads — re-accepted 2026-07-16 after upstream drift: delta was docs-only (permset-assignment verification steps, read-only SOQL); fixture content unchanged",
-    "reviewed": "2026-07-16"
+    "note": "Salesforce Agentforce docs ship attack strings as test payloads — re-accepted 2026-07-17 after a second upstream drift this week: v0.9 adds an agent-optimization workflow (4 new pattern reference docs, hand-read in full); fixture content unchanged",
+    "reviewed": "2026-07-17"
   },
   "agentforce-adlc:agentforce-secure": {
     "hash": "2f2bf93f5f3efcb07e6e404cffbd295195267fb441c88857238c72b315e60723",
