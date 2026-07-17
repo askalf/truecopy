@@ -11,7 +11,7 @@
 // vendor plugins at their catalog-pinned SHAs) or, legacy mode, a plain
 // marketplace clone (`plugins/` + `external_plugins/` trees) scanned in place.
 // Exit 0 when nothing is poisoned; exit 1 the moment anything flags, so the
-// scheduled run goes red and someone looks. Offline like the rest of canon:
+// scheduled run goes red and someone looks. Offline like the rest of truecopy:
 // the workflow fetches, this script only reads disk.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,7 +20,7 @@ import { scan, skillHash, discoverMarketplaceSkills } from '../src/index.mjs';
 
 const ADVISORY_ROWS_SHOWN = 80; // WATCH.md stays readable; results.json has every row
 
-// Reviewed-benign findings, accepted with canon's `--force` semantics: each
+// Reviewed-benign findings, accepted with truecopy's `--force` semantics: each
 // entry accepts a skill's findings for EXACTLY the bytes reviewed (keyed by
 // skill hash). Any drift — or new findings on other skills — flags as usual.
 let accepted = {};
@@ -117,9 +117,9 @@ write('results.json', JSON.stringify({
 }, null, 2) + '\n');
 
 const md = [];
-md.push('# canon marketplace watch');
+md.push('# truecopy marketplace watch');
 md.push('');
-md.push(`> The official Claude Code plugin directory ([anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official)) — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — re-scanned on a schedule by [canon](https://github.com/askalf/canon). Latest snapshot — history in [history.jsonl](./history.jsonl), methodology in [the 2,019-skill study](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain).`);
+md.push(`> The official Claude Code plugin directory ([anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official)) — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — re-scanned on a schedule by [truecopy](https://github.com/askalf/truecopy). Latest snapshot — history in [history.jsonl](./history.jsonl), methodology in [the 2,019-skill study](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain).`);
 md.push('');
 md.push(`**${scannedAt.slice(0, 10)}** — **${plugins}** plugins · **${skills.length}** skills scanned · **${poisoned}** poisoned · **${advisoryCount}** advisories`);
 md.push('');
@@ -134,7 +134,7 @@ if (poisoned) {
 if (acceptedRows.length) {
   md.push('## Accepted findings (reviewed benign)');
   md.push('');
-  md.push('Skills whose findings were manually reviewed and accepted for **exactly these bytes** ([watch-accepted.json](https://github.com/askalf/canon/blob/master/support/watch-accepted.json), canon\'s `--force` semantics) — any content change re-flags them.');
+  md.push('Skills whose findings were manually reviewed and accepted for **exactly these bytes** ([watch-accepted.json](https://github.com/askalf/truecopy/blob/master/support/watch-accepted.json), truecopy\'s `--force` semantics) — any content change re-flags them.');
   md.push('');
   for (const r of acceptedRows) {
     md.push(`- **${r.name}** — ${r.findings.join(' · ')} — *${r.class}${r.note ? `: ${r.note}` : ''}*`);
