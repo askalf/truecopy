@@ -124,6 +124,15 @@ A `--force` pin is an explicit accept: you read those bytes, truecopy records `v
 
 And the audit didn't end with the study: a **standing watch** re-scans the full official plugin directory every week — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — and publishes the snapshot — plugin and skill counts, verdicts, advisories, pin drift — to [`WATCH.md` on the `watch` branch](https://github.com/askalf/truecopy/blob/watch/WATCH.md) (that's the badge at the top of this page). A poisoned skill would turn the badge red and the scheduled run with it.
 
+**The watch is consumable, not just a badge.** Each run also publishes [`directory-manifest.json`](https://github.com/askalf/truecopy/blob/watch/directory-manifest.json) — name → content hash for every skill it scanned, plus the currently-flagged names. Point `check-manifest` at it and every marketplace plugin skill **installed on your machine** is compared against exactly the bytes the watch vetted:
+
+```bash
+curl -fsSLo directory-manifest.json https://raw.githubusercontent.com/askalf/truecopy/watch/directory-manifest.json
+truecopy check-manifest directory-manifest.json
+```
+
+An installed skill whose bytes differ from what the watch scanned is `drifted`, a watch-flagged skill fails even byte-identical (a hash match is not an endorsement), and skills from other marketplaces — or your own — are `unlisted`, reported but never fatal. Exit 1 on any failure, `--json` for machines, and offline like everything else: you fetch the manifest, truecopy only reads it.
+
 Every row above is verified **live**, not just unit-tested: each scenario ran in its own fresh headless Claude Code session against a real pinned skill. A skill silently edited after pinning physically cannot run — the invocation fails and the model is told why ("drifted from its pinned version") — and restoring the exact pinned bytes immediately un-blocks it. The check costs roughly a quarter-second per skill invocation.
 
 **Per-repo lockdown:** hook settings merge from the project too, so `truecopy hook install --strict` in a repo (committed next to `truecopy.lock`) makes *that repo* whitelist-strict for everyone who works in it, while machines keep the adoption-friendly default globally. And the same committed `truecopy.lock` gates CI (`truecopy verify`), `truecopy-mcp`, and every teammate's sessions.

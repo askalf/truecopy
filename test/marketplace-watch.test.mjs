@@ -91,13 +91,18 @@ test('corpus mode: poisoned skill flags, drift and fetch errors are reported, ex
   assert.deepEqual(results.flagged.map((f) => f.name), ['p-evil:sneaky']);
   assert.equal(results.pinDriftDetail[0].name, 'p-drift');
   assert.equal(results.fetchErrorDetail[0].name, 'p-gone');
+  // the manifest names the poisoned skill so check-manifest fails it even byte-identical
+  const manifest = JSON.parse(fs.readFileSync(path.join(out, 'directory-manifest.json'), 'utf8'));
+  assert.deepEqual(manifest.flagged, ['p-evil:sneaky']);
+  assert.ok(manifest.skills['p-evil:sneaky']);
   const watchMd = fs.readFileSync(path.join(out, 'WATCH.md'), 'utf8');
   assert.match(watchMd, /## ☠ Poisoned/);
   assert.match(watchMd, /## ⚠ Pin drift/);
   assert.match(watchMd, /## ✗ Not scanned/);
 });
 
-test('corpus mode: all-clean corpus exits 0 with a green badge', () => {
+test('corpus mode: all-clean corpus exits 0 with a green badge and a consumable manifest', async () => {
+  const { scan, skillHash } = await import('../src/index.mjs');
   const dir = path.join(baseDir, 'p-solo');
   put(path.join(dir, 'skills', 'helper', 'SKILL.md'), CLEAN);
   const corpus = mkCorpus('corpus-clean', [{ name: 'p-solo', kind: 'local', dir, status: 'ok' }]);
@@ -105,6 +110,10 @@ test('corpus mode: all-clean corpus exits 0 with a green badge', () => {
   const r = runWatch(corpus, out);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.equal(JSON.parse(fs.readFileSync(path.join(out, 'badge.json'), 'utf8')).color, 'brightgreen');
+  // directory-manifest.json carries name → the same hash the scan derived
+  const manifest = JSON.parse(fs.readFileSync(path.join(out, 'directory-manifest.json'), 'utf8'));
+  assert.equal(manifest.skills['p-solo:helper'], skillHash(scan(path.join(dir, 'skills', 'helper')).skill));
+  assert.deepEqual(manifest.flagged, []);
 });
 
 test('corpus mode: fetch failures alone keep exit 0 but turn the badge orange', () => {
