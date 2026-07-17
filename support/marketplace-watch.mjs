@@ -16,15 +16,40 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scan, skillHash, discoverMarketplaceSkills } from '../src/index.mjs';
+import { scan, scanSkill, skillHash, discoverMarketplaceSkills } from '../src/index.mjs';
 
 const ADVISORY_ROWS_SHOWN = 80; // WATCH.md stays readable; results.json has every row
 
 // Reviewed-benign findings, accepted with truecopy's `--force` semantics: each
 // entry accepts a skill's findings for EXACTLY the bytes reviewed (keyed by
 // skill hash). Any drift — or new findings on other skills — flags as usual.
+// High-churn vendor skills can opt into per-file granularity (#68) with
+// `"granularity": "finding-files"` + `"files": { <path>: <sha256>, … }`: the
+// acceptance is keyed to the reviewed finding-bearing files instead of the
+// whole-skill hash, so an unrelated upstream docs release no longer lapses it.
 let accepted = {};
 try { accepted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('watch-accepted.json', import.meta.url)), 'utf8')); } catch { /* no accept file = accept nothing */ }
+
+// Does an accept entry still cover this scanned skill?
+//   whole-skill (default) — `hash` must equal today's skill hash: any byte
+//   anywhere re-flags. Fail-closed and churn-prone by design.
+//   finding-files — every file listed in `files` that is still present at its
+//   reviewed bytes is EXCLUDED, and the REMAINDER of the skill must scan clean
+//   on the same detection pipeline. Since we only get here when the full skill
+//   flagged, a clean remainder proves every current finding lives in a reviewed,
+//   byte-identical file: a reviewed file that drifts rejoins the scan (its
+//   fixtures re-flag), and a new finding in a new or changed file flags on its
+//   own. An entry with no usable `files` map excludes nothing — the remainder is
+//   the whole flagged skill, so it fails closed.
+function covers(a, skill) {
+  if (a.granularity !== 'finding-files') return a.hash === skillHash(skill);
+  const reviewed = (a.files && typeof a.files === 'object') ? a.files : {};
+  const hashOf = Object.fromEntries((skill.files || []).map((f) => [f.path, f.hash]));
+  const rest = (skill.scanPieces || []).filter((p) => hashOf[p.path] !== reviewed[p.path]);
+  if (!rest.length) return true;
+  const s = scanSkill({ kind: 'skill', name: skill.name, scanTargets: [{ name: skill.name, description: rest.map((p) => p.text).join('\n') }] });
+  return s.verdict === 'clean';
+}
 
 const [rootArg, outDir] = process.argv.slice(2);
 if (!rootArg || !outDir) {
@@ -86,7 +111,7 @@ for (const s of skills) {
   if (r.verdict !== 'clean') {
     const findings = r.findings.map((f) => `${f.tool}: ${f.flags.join('; ')}`);
     const a = accepted[s.name];
-    if (a && a.hash === skillHash(r.skill)) acceptedRows.push({ name: s.name, findings, class: a.class, note: a.note });
+    if (a && covers(a, r.skill)) acceptedRows.push({ name: s.name, findings, class: a.class, note: a.note, ...(a.granularity ? { granularity: a.granularity } : {}) });
     else flaggedRows.push({ name: s.name, verdict: r.verdict, findings });
   } else if (advisories.length) {
     advisoryRows.push({ name: s.name, advisories });
@@ -134,10 +159,10 @@ if (poisoned) {
 if (acceptedRows.length) {
   md.push('## Accepted findings (reviewed benign)');
   md.push('');
-  md.push('Skills whose findings were manually reviewed and accepted for **exactly these bytes** ([watch-accepted.json](https://github.com/askalf/truecopy/blob/master/support/watch-accepted.json), truecopy\'s `--force` semantics) — any content change re-flags them.');
+  md.push('Skills whose findings were manually reviewed and accepted for **exactly these bytes** ([watch-accepted.json](https://github.com/askalf/truecopy/blob/master/support/watch-accepted.json), truecopy\'s `--force` semantics) — any content change re-flags them. Entries marked *per-file* key the acceptance to the reviewed finding-bearing files instead: those files changing re-flags, and everything else in the skill must still scan clean, but unrelated upstream churn no longer lapses the review.');
   md.push('');
   for (const r of acceptedRows) {
-    md.push(`- **${r.name}** — ${r.findings.join(' · ')} — *${r.class}${r.note ? `: ${r.note}` : ''}*`);
+    md.push(`- **${r.name}** — ${r.findings.join(' · ')} — *${r.class}${r.note ? `: ${r.note}` : ''}*${r.granularity === 'finding-files' ? ' *(per-file)*' : ''}`);
   }
   md.push('');
 }

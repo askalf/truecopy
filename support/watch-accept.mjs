@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+// Author a watch-accepted.json entry for a skill you just hand-reviewed —
+// prints the entry JSON to paste under its catalog name (fill in class/note).
+//
+//   node support/watch-accept.mjs <skill-dir>           # whole-skill hash entry
+//   node support/watch-accept.mjs <skill-dir> --files   # per-file granularity (#68)
+//
+// --files keys the acceptance to the finding-bearing files: each file is scanned
+// alone to attribute the findings, then the attribution is verified with exactly
+// the predicate the watch uses (everything OUTSIDE the recorded files must scan
+// clean). If that remainder still flags — e.g. a finding only matches across a
+// file boundary — the helper refuses per-file mode rather than emit an entry
+// that silences something no single file carries.
+import { scan, scanSkill, skillHash } from '../src/index.mjs';
+
+const args = process.argv.slice(2);
+const wantFiles = args.includes('--files');
+const dir = args.find((a) => a !== '--files');
+if (!dir) {
+  console.error('usage: watch-accept.mjs <skill-dir> [--files]');
+  process.exit(2);
+}
+
+const r = scan(dir);
+if (r.verdict === 'clean') {
+  console.error(`${dir}: scans clean — nothing to accept`);
+  process.exit(2);
+}
+console.error(`${r.skill.name}: ${r.findings.length} finding(s)`);
+for (const f of r.findings) console.error(`  ${f.tool}: ${f.flags.join('; ')}`);
+
+const reviewed = new Date().toISOString().slice(0, 10);
+const entry = { class: 'FILL ME IN', note: 'FILL ME IN', reviewed };
+
+if (!wantFiles) {
+  console.log(JSON.stringify({ hash: skillHash(r.skill), ...entry }, null, 2));
+  process.exit(0);
+}
+
+const pieces = r.skill.scanPieces || [];
+if (!pieces.length) {
+  console.error(`${dir}: not a skill directory — per-file granularity needs one`);
+  process.exit(2);
+}
+const scanOne = (ps) => scanSkill({ kind: 'skill', name: r.skill.name, scanTargets: [{ name: r.skill.name, description: ps.map((p) => p.text).join('\n') }] });
+const bearing = pieces.filter((p) => scanOne([p]).verdict !== 'clean');
+if (scanOne(pieces.filter((p) => !bearing.includes(p))).verdict !== 'clean') {
+  console.error(`${dir}: findings not attributable to individual files — use the whole-skill hash entry`);
+  process.exit(2);
+}
+const hashOf = Object.fromEntries(r.skill.files.map((f) => [f.path, f.hash]));
+const files = Object.fromEntries(bearing.map((p) => [p.path, hashOf[p.path]]));
+console.error(`finding-bearing files: ${Object.keys(files).join(', ') || '(none)'}`);
+console.log(JSON.stringify({ granularity: 'finding-files', files, ...entry }, null, 2));

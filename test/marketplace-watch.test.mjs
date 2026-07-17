@@ -176,6 +176,105 @@ test('accepted findings pass for exactly those bytes and re-flag on drift', asyn
   assert.equal(s2.accepted, 0);
 });
 
+// ── per-file acceptance granularity (#68): reviewed files pin, the rest may churn ──
+
+// Stage a watch script copy next to a bespoke accept file (the script resolves
+// watch-accepted.json and ../src relative to itself). src/node_modules land in
+// baseDir once, shared by every stage.
+function stageWatch(name, acceptedMap) {
+  const stage = path.join(baseDir, name);
+  fs.mkdirSync(stage, { recursive: true });
+  const staged = path.join(stage, 'marketplace-watch.mjs');
+  fs.copyFileSync(WATCH, staged);
+  if (!fs.existsSync(path.join(baseDir, 'src'))) fs.cpSync(fileURLToPath(new URL('../src', import.meta.url)), path.join(baseDir, 'src'), { recursive: true });
+  if (!fs.existsSync(path.join(baseDir, 'node_modules'))) fs.cpSync(fileURLToPath(new URL('../node_modules', import.meta.url)), path.join(baseDir, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(stage, 'watch-accepted.json'), JSON.stringify(acceptedMap));
+  return staged;
+}
+
+test('per-file acceptance: unrelated churn holds, new findings and reviewed-file drift lapse', async () => {
+  const { scan } = await import('../src/index.mjs');
+  const dir = path.join(baseDir, 'p-perfile');
+  const skillDir = path.join(dir, 'skills', 'sneaky');
+  put(path.join(skillDir, 'SKILL.md'), POISON);
+  put(path.join(skillDir, 'docs', 'notes.md'), CLEAN);
+  const corpus = mkCorpus('corpus-perfile', [{ name: 'p-perfile', kind: 'local', dir, status: 'ok' }]);
+
+  // accept keyed to the finding-bearing file only
+  const hashOf = Object.fromEntries(scan(skillDir).skill.files.map((f) => [f.path, f.hash]));
+  const staged = stageWatch('stage-perfile', {
+    'p-perfile:sneaky': { granularity: 'finding-files', files: { 'SKILL.md': hashOf['SKILL.md'] }, class: 'test fixture', note: 'per-file acceptance' },
+  });
+  const run = (out) => spawnSync(process.execPath, [staged, corpus, path.join(baseDir, out)], { encoding: 'utf8' });
+
+  // baseline: accepted, and reported as per-file
+  const r1 = run('out-perfile-1');
+  assert.equal(r1.status, 0, r1.stdout + r1.stderr);
+  assert.equal(JSON.parse(r1.stdout).accepted, 1);
+  const results1 = JSON.parse(fs.readFileSync(path.join(baseDir, 'out-perfile-1', 'results.json'), 'utf8'));
+  assert.equal(results1.acceptedDetail[0].granularity, 'finding-files');
+  assert.match(fs.readFileSync(path.join(baseDir, 'out-perfile-1', 'WATCH.md'), 'utf8'), /\(per-file\)/);
+
+  // unrelated churn — a new doc and a changed doc — HOLDS (the whole point of #68)
+  put(path.join(skillDir, 'docs', 'notes.md'), CLEAN + 'v2: more notes\n');
+  put(path.join(skillDir, 'docs', 'changelog.md'), CLEAN);
+  const r2 = run('out-perfile-2');
+  assert.equal(r2.status, 0, r2.stdout + r2.stderr);
+  const s2 = JSON.parse(r2.stdout);
+  assert.equal(s2.poisoned, 0);
+  assert.equal(s2.accepted, 1);
+
+  // a NEW finding in a new file lapses it — detection still runs on the full skill
+  put(path.join(skillDir, 'docs', 'extra.md'), POISON);
+  const r3 = run('out-perfile-3');
+  assert.equal(r3.status, 1, r3.stdout + r3.stderr);
+  assert.equal(JSON.parse(r3.stdout).poisoned, 1);
+  fs.rmSync(path.join(skillDir, 'docs', 'extra.md'));
+
+  // the reviewed file itself drifting lapses it — that guarantee is preserved
+  put(path.join(skillDir, 'SKILL.md'), POISON + 'now with different bytes\n');
+  const r4 = run('out-perfile-4');
+  assert.equal(r4.status, 1, r4.stdout + r4.stderr);
+  const s4 = JSON.parse(r4.stdout);
+  assert.equal(s4.poisoned, 1);
+  assert.equal(s4.accepted, 0);
+});
+
+test('per-file acceptance: an entry with no files map fails closed', () => {
+  const dir = path.join(baseDir, 'p-nofiles');
+  put(path.join(dir, 'skills', 'sneaky', 'SKILL.md'), POISON);
+  const corpus = mkCorpus('corpus-nofiles', [{ name: 'p-nofiles', kind: 'local', dir, status: 'ok' }]);
+  const staged = stageWatch('stage-nofiles', {
+    'p-nofiles:sneaky': { granularity: 'finding-files', class: 'test fixture', note: 'no files listed' },
+  });
+  const r = spawnSync(process.execPath, [staged, corpus, path.join(baseDir, 'out-nofiles')], { encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(JSON.parse(r.stdout).poisoned, 1);
+});
+
+test('watch-accept --files emits an entry the watch accepts, keyed to the finding-bearing file', async () => {
+  const { scan } = await import('../src/index.mjs');
+  const ACCEPT = fileURLToPath(new URL('../support/watch-accept.mjs', import.meta.url));
+  const dir = path.join(baseDir, 'p-author');
+  const skillDir = path.join(dir, 'skills', 'sneaky');
+  put(path.join(skillDir, 'SKILL.md'), POISON);
+  put(path.join(skillDir, 'docs', 'notes.md'), CLEAN);
+
+  const r = spawnSync(process.execPath, [ACCEPT, skillDir, '--files'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const entry = JSON.parse(r.stdout);
+  assert.equal(entry.granularity, 'finding-files');
+  const hashOf = Object.fromEntries(scan(skillDir).skill.files.map((f) => [f.path, f.hash]));
+  assert.deepEqual(entry.files, { 'SKILL.md': hashOf['SKILL.md'] });
+
+  // the emitted entry round-trips through the watch
+  const corpus = mkCorpus('corpus-author', [{ name: 'p-author', kind: 'local', dir, status: 'ok' }]);
+  const staged = stageWatch('stage-author', { 'p-author:sneaky': { ...entry, class: 'test fixture', note: 'authored' } });
+  const w = spawnSync(process.execPath, [staged, corpus, path.join(baseDir, 'out-author')], { encoding: 'utf8' });
+  assert.equal(w.status, 0, w.stdout + w.stderr);
+  assert.equal(JSON.parse(w.stdout).accepted, 1);
+});
+
 // ── legacy mode: a plain marketplace clone still works ──
 
 test('legacy mode: a plugins/-tree clone scans in place with a plugin count', () => {

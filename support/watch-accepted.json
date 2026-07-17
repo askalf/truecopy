@@ -1,20 +1,33 @@
 {
   "agentforce-adlc:agentforce-generate": {
-    "hash": "bddf57157b63206f7c5ac2ea68321a71b316d7b259ffa9041eb3aa8ac762a833",
+    "granularity": "finding-files",
+    "files": {
+      "references/safety-review-reference.md": "af86e02ad86aa84deec037bbb512ce04f11b66c8fecc4edc128ba836458e61ac"
+    },
     "class": "security-testing fixtures",
-    "note": "Salesforce Agentforce docs ship attack strings as test payloads — re-accepted 2026-07-17 after a second upstream drift this week: v0.9 adds an agent-optimization workflow (4 new pattern reference docs, hand-read in full); fixture content unchanged",
+    "note": "Salesforce Agentforce docs ship attack strings as test payloads — per-file acceptance (#68) after two whole-skill lapses in one week (#65, #67), both re-reviews finding only unrelated docs churn; the fixture file is the reviewed bytes from those reads",
     "reviewed": "2026-07-17"
   },
   "agentforce-adlc:agentforce-secure": {
-    "hash": "2f2bf93f5f3efcb07e6e404cffbd295195267fb441c88857238c72b315e60723",
+    "granularity": "finding-files",
+    "files": {
+      "SKILL.md": "5f1a1485c36043656047794d08e4f78f3d274ed1e56b2bb0d969349c5ee75985",
+      "assets/payloads/prompt-injection.yaml": "a42cebb9dbf7633f1f0ad1ebf6ba0a221f9e5817be49dc6dc42786d8fe4094d4",
+      "assets/payloads/system-prompt-leakage.yaml": "3a156fc7815c1ca1ed7b2535929f0d6a59fce4d009bf3aef8c01073b907869d6",
+      "references/owasp-categories.md": "98fb14d493183edb965932ccd69bc4d2050ef334ad35b74aa4443e4a4d75ec0e",
+      "references/remediation-guide.md": "529cfc5533688473735f5b082af5525820dca1c4c401051deccb3b817f4daa7a"
+    },
     "class": "security-testing fixtures",
-    "note": "Salesforce Agentforce docs ship attack strings as test payloads",
+    "note": "Salesforce Agentforce docs ship attack strings as test payloads — per-file acceptance (#68), fixture bytes identical to the 2026-07-09 review",
     "reviewed": "2026-07-09"
   },
   "agentforce-adlc:agentforce-test": {
-    "hash": "8a23ff1c327b162c024bc79d348f91c3644cebf4bd04bcfbfb58dbb26ffed989",
+    "granularity": "finding-files",
+    "files": {
+      "references/preview-testing.md": "d3a51189f07a524f4eb5c41fb96c4ac7adbfcbc2c858241bd9a4d426af1cf7c5"
+    },
     "class": "security-testing fixtures",
-    "note": "Salesforce Agentforce docs ship attack strings as test payloads",
+    "note": "Salesforce Agentforce docs ship attack strings as test payloads — per-file acceptance (#68), fixture bytes identical to the 2026-07-09 review",
     "reviewed": "2026-07-09"
   },
   "aws-data-analytics:finding-data-lake-assets": {
