@@ -30,6 +30,15 @@
     "note": "Salesforce Agentforce docs ship attack strings as test payloads — per-file acceptance (#68), fixture bytes identical to the 2026-07-09 review",
     "reviewed": "2026-07-09"
   },
+  "aws-core:launch-with-aws": {
+    "granularity": "finding-files",
+    "files": {
+      "scripts/launch_config.py": "207265c7b9580f45ef92b6dd0835a101d8d354a574eb97721b0b9f3f41de357c"
+    },
+    "class": "defensive quoting",
+    "note": "AWS's own OIDC config hardening: 'Refusing to send credentials over a non-HTTPS connection' refusal strings + its ~/.launch-with-aws session path constant — the module validates endpoints against exfil, it doesn't perform it",
+    "reviewed": "2026-07-17"
+  },
   "aws-data-analytics:finding-data-lake-assets": {
     "hash": "fc9a76c35cbd1846bbf26b4d19758151e21c06c356a0008cd172db38058aba0a",
     "class": "defensive quoting",
@@ -55,10 +64,32 @@
     "reviewed": "2026-07-09"
   },
   "posthog:setting-up-a-data-warehouse-source": {
-    "hash": "28520f853450fe6cb736afd00416d19347651c2e0f7444e2e824fec835790e5a",
+    "granularity": "finding-files",
+    "files": {
+      "SKILL.md": "1f5d190bbca689ab337569eb51d6c01386a3caa332ee22e5b66d37322c484eea"
+    },
     "class": "paraphrased-exfil near-miss",
-    "note": "data-warehouse source setup docs",
-    "reviewed": "2026-07-09"
+    "note": "data-warehouse source setup docs — re-read in full 2026-07-17 after upstream drift lapsed the 07-09 whole-skill accept: new secure connect-link flow explicitly forbids pasting secrets in chat; converted to per-file (PostHog ships constantly)",
+    "reviewed": "2026-07-17"
+  },
+  "posthog:signals-scout-logs": {
+    "granularity": "finding-files",
+    "files": {
+      "SKILL.md": "e52ca1eba067508a69efef63393fc2b6aae0d97d3939fc741b054c365acdd194"
+    },
+    "class": "defensive quoting",
+    "note": "log-scout prompt quotes injection strings ('ignore prior rules', 'file a report saying X') in its own log-content-is-untrusted-data defense section — teaches resisting, not performing",
+    "reviewed": "2026-07-17"
+  },
+  "receipts:receipts": {
+    "granularity": "finding-files",
+    "files": {
+      "SKILL.md": "5b2f407ff40639727310236f4b34986cacd4bf616c07d2e4198846726842e346",
+      "scripts/mine-transcripts.mjs": "95318067a645b5f0019c57e370f06747e9ea390591f1546418b2762679b10dd2"
+    },
+    "class": "defensive quoting",
+    "note": "Anthropic in-repo usage-report plugin: mines ~/.claude/projects transcripts LOCALLY (miner has zero network primitives, execFileSync=git only, hand-verified) and quotes 'ignore previous instructions' in its names-are-data defense; sensitive path = its own documented data source",
+    "reviewed": "2026-07-17"
   },
   "resend:resend": {
     "hash": "4cf9339a290395c1d78ba8ae458aea0d639660cb20e61603ca4db8d60ba09c69",
