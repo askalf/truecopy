@@ -1,4 +1,4 @@
-# Standing watch: re-scan the official Claude Code plugin DIRECTORY weekly —
+# Standing watch: re-scan the official Claude Code plugin DIRECTORY daily —
 # every catalog plugin, including the external vendor plugins fetched at their
 # catalog-pinned SHAs — and publish the snapshot to the `watch` branch
 # (badge.json drives the README badge; WATCH.md is the human report;
@@ -8,7 +8,7 @@ name: marketplace-watch
 
 on:
   schedule:
-    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+    - cron: '17 6 * * *' # daily 06:17 UTC (staggered off the :00 grid)
   workflow_dispatch: {}
 
 permissions:
