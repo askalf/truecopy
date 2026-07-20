@@ -1,4 +1,0 @@
-# The image installs truecopy from npm and only needs the pin helper — keep the
-# build context tiny and reproducible rather than copying the working tree in.
-*
-!docker/pin-everything.mjs
