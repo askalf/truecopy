@@ -4,6 +4,18 @@ All notable changes to **@askalf/truecopy** are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **`Dockerfile`** — run `truecopy-mcp` as a container. Because the gate needs a
+  downstream server to gate, the image wraps the MCP reference server
+  (`@modelcontextprotocol/server-everything`) and pins its tools at build time
+  (`docker/pin-everything.mjs` captures the live `tools/list` → `truecopy add`),
+  so `tools/list` returns a real, **vetted** set over stdio instead of an empty
+  one. Lets MCP hosts that launch servers from an image (e.g. Glama) build and
+  introspect truecopy. Both package versions are pinned via build args for a
+  reproducible image and lock.
+
 ## [0.9.0] - 2026-07-17
 
 ### Added

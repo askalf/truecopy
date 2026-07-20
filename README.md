@@ -70,6 +70,14 @@ A silently-added, drifted, or poisoned tool is stripped from `tools/list` (the a
 
 > **Windows / Git Bash:** MSYS auto-rewrites an argument that looks like a Unix absolute path before `truecopy` (a native node process) sees it — a bare `--lock /etc/truecopy.lock`, a scan source like `/srv/skill.json`, or the wrapped server's `/workspace` path can arrive mangled (e.g. prefixed with `C:/Program Files/Git/…`), so the lock isn't found or the wrong path is scanned. Prefix the run with `MSYS_NO_PATHCONV=1` and use drive-letter paths (`C:/…`), or run truecopy from PowerShell/cmd. Not a truecopy bug — the arg is rewritten before truecopy reads it.
 
+**As a container** — the repo ships a [`Dockerfile`](Dockerfile) that runs `truecopy-mcp` in front of the MCP reference server ([`server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything)) and pins its tools at build time, so `tools/list` returns a live, **vetted** set over stdio. Useful for MCP hosts that launch servers from an image (e.g. [Glama](https://glama.ai/mcp/servers)):
+
+```bash
+docker build -t truecopy-mcp . && docker run --rm -i truecopy-mcp
+```
+
+A gate with nothing pinned correctly drops *every* tool, so the image bakes a `truecopy.lock` for the wrapped server — point the `ENTRYPOINT` at your own downstream and lock to gate a real server.
+
 **`truecopy guard`** — a launch gate. Verify the lock, then run a command only if it's clean:
 
 ```bash
