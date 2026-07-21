@@ -52,6 +52,17 @@ function covers(a, skill) {
   return s.verdict === 'clean';
 }
 
+// evidenceOf() locates matches against `skill.scanPieces`, which are paths
+// relative to the SKILL's own directory — but a plugin's declared source (what
+// the site resolves a github.com/.../tree/<sha> link from, in marketplace.json)
+// points at the plugin REPO root, and a skill is often nested under it
+// (skills/<name>/…). So a bare skill-relative `file` can't be appended to that
+// tree link to build a working blob/#Lline deep link. `skillPath` (the skill's
+// own directory relative to the repo root the tree link resolves to) closes
+// that gap; '.' means the skill IS the repo root, so there's nothing to join.
+const repoRelative = (skillPath, file) => (skillPath && skillPath !== '.') ? `${skillPath}/${file}` : file;
+const withRepoPaths = (evidence, skillPath) => evidence.map((e) => ({ ...e, file: repoRelative(skillPath, e.file) }));
+
 const [rootArg, outDir] = process.argv.slice(2);
 if (!rootArg || !outDir) {
   console.error('usage: marketplace-watch.mjs <corpus-or-clone> <out-dir>');
@@ -84,7 +95,7 @@ if (corpusMode) {
       const inner = s.name.startsWith(`${row.name}:`) ? s.name : `${row.name}/${s.name}`;
       if (seen.has(inner)) continue;
       seen.add(inner);
-      skills.push({ name: inner, dir: s.dir });
+      skills.push({ name: inner, dir: s.dir, skillPath: path.relative(row.dir, s.dir).replace(/\\/g, '/') });
     }
   }
   if (!plugins) {
@@ -92,7 +103,7 @@ if (corpusMode) {
     process.exit(2);
   }
 } else {
-  for (const s of discoverMarketplaceSkills(root)) skills.push(s);
+  for (const s of discoverMarketplaceSkills(root)) skills.push({ ...s, skillPath: path.relative(root, s.dir).replace(/\\/g, '/') });
   plugins = new Set(skills.map((s) => s.name.split(':')[0])).size;
   if (!skills.length) {
     console.error(`no plugin skills discovered under ${root} — wrong clone, or the marketplace layout changed`);
@@ -124,12 +135,13 @@ for (const s of skills) {
   if (r.verdict !== 'clean') {
     const findings = r.findings.map((f) => `${f.tool}: ${f.flags.join('; ')}`);
     const ev = evidenceOf(r.findings, r.skill); evidenceMismatches += ev.mismatches;
+    const evidence = withRepoPaths(ev.evidence, s.skillPath);
     const a = accepted[s.name];
-    if (a && covers(a, r.skill)) acceptedRows.push({ name: s.name, findings, class: a.class, note: a.note, evidence: ev.evidence, ...(a.granularity ? { granularity: a.granularity } : {}) });
-    else flaggedRows.push({ name: s.name, verdict: r.verdict, findings, evidence: ev.evidence });
+    if (a && covers(a, r.skill)) acceptedRows.push({ name: s.name, findings, class: a.class, note: a.note, evidence, ...(a.granularity ? { granularity: a.granularity } : {}) });
+    else flaggedRows.push({ name: s.name, verdict: r.verdict, findings, evidence });
   } else if (advisories.length) {
     const ev = evidenceOf(r.advisories, r.skill); evidenceMismatches += ev.mismatches;
-    advisoryRows.push({ name: s.name, advisories, evidence: ev.evidence });
+    advisoryRows.push({ name: s.name, advisories, evidence: withRepoPaths(ev.evidence, s.skillPath) });
   }
 }
 

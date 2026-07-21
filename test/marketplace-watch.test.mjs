@@ -102,6 +102,25 @@ test('corpus mode: poisoned skill flags, drift and fetch errors are reported, ex
   assert.match(watchMd, /## ✗ Not scanned/);
 });
 
+test('evidence file is repo-relative to the skill\'s source repo, not just the skill dir', () => {
+  // discoverMarketplaceSkills always resolves a skill at <pluginRoot>/skills/<name>
+  // — evidence.mjs's locate() returns paths relative to THAT skill dir (what
+  // scanPieces uses), e.g. bare 'SKILL.md'. The site builds its "view source"
+  // link from the plugin's declared repo root (row.dir here), so a working
+  // blob/#Lline deep link needs 'skills/<name>/SKILL.md', not 'SKILL.md'.
+  const dir = path.join(baseDir, 'p-nested-evidence');
+  put(path.join(dir, 'skills', 'sneaky', 'SKILL.md'), POISON);
+  const corpus = mkCorpus('corpus-nested-evidence', [{ name: 'p-nested-evidence', kind: 'local', dir, status: 'ok' }]);
+  const out = path.join(baseDir, 'out-nested-evidence');
+  const r = runWatch(corpus, out);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const results = JSON.parse(fs.readFileSync(path.join(out, 'results.json'), 'utf8'));
+  const row = results.flagged[0];
+  assert.equal(row.name, 'p-nested-evidence:sneaky');
+  assert.ok(row.evidence.length > 0, 'expected at least one evidence entry');
+  for (const e of row.evidence) assert.equal(e.file, 'skills/sneaky/SKILL.md');
+});
+
 test('corpus mode: all-clean corpus exits 0 with a green badge and a consumable manifest', async () => {
   const { scan, skillHash } = await import('../src/index.mjs');
   const dir = path.join(baseDir, 'p-solo');
