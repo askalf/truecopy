@@ -1,6 +1,6 @@
 # truecopy
 
-[![npm](https://img.shields.io/npm/v/%40askalf%2Ftruecopy?label=npm)](https://www.npmjs.com/package/@askalf/truecopy) [![GitHub Marketplace](https://img.shields.io/badge/marketplace-truecopy--action-6f42c1?logo=github)](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills) [![marketplace watch](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json)](https://github.com/askalf/truecopy/blob/watch/WATCH.md) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge)](https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy) [![truecopy MCP server](https://glama.ai/mcp/servers/askalf/truecopy/badges/score.svg)](https://glama.ai/mcp/servers/askalf/truecopy)
+[![npm](https://img.shields.io/npm/v/%40askalf%2Ftruecopy?label=npm)](https://www.npmjs.com/package/@askalf/truecopy) [![GitHub Marketplace](https://img.shields.io/badge/marketplace-truecopy--action-6f42c1?logo=github)](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills) [![marketplace watch](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json)](https://github.com/askalf/truecopy/blob/watch/WATCH.md) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge)](https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy)
 
 > _truecopy — **own your agent skills**. Vet, sign, and pin every skill & MCP server before it runs. Part of **[Own Your Stack](https://github.com/askalf)** — own your AI infrastructure instead of renting it by the token._
 
@@ -75,6 +75,10 @@ A silently-added, drifted, or poisoned tool is stripped from `tools/list` (the a
 ```bash
 docker build -t truecopy-mcp . && docker run --rm -i truecopy-mcp
 ```
+
+[![truecopy on Glama](https://glama.ai/mcp/servers/askalf/truecopy/badges/card.svg)](https://glama.ai/mcp/servers/askalf/truecopy)
+
+> The tools listed on that directory page are the **reference server's** (`echo`, `get-sum`, …), not truecopy's — truecopy is the gate in front of them, so it ships no tools of its own. Any per-tool quality score there grades those upstream definitions, which the gate passes through byte-identical.
 
 A gate with nothing pinned correctly drops *every* tool, so the image bakes a `truecopy.lock` for the wrapped server — point the `ENTRYPOINT` at your own downstream and lock to gate a real server.
 
