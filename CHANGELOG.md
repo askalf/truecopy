@@ -7,6 +7,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Per-finding evidence — `scan` now reports *what* it matched, and where.**
+  Findings and advisories carry an `evidence` array of
+  `{ flag, text, file, line }`: the exact matched fragment, capped at 160
+  chars, plus the file and 1-based line it occurs on. Surfaced in `--json`.
+  Purely additive — `flags`, `why`, verdicts, and skill hashes are unchanged,
+  so no existing consumer or verdict shifts. (Requires the bumped
+  `@askalf/redstamp` pin, whose sub-detectors now return the matched span
+  alongside each flag.)
+- **Publish-time confabulation self-check in the marketplace watch.** Before
+  publishing, every claimed match is re-located in the pinned source bytes; a
+  fragment that cannot be found is **dropped**, never published, and counted in
+  a new `evidenceMismatches` field in the watch summary. The feed can therefore
+  only ever show a fragment that provably exists at the line it links to — a
+  nonzero count is itself a signal that a detector claimed something the bytes
+  don't support. Evidence file paths are published **repo-relative** (e.g.
+  `skills/<name>/SKILL.md`), so consumers can append them to a plugin's source
+  URL to deep-link the exact line.
 - **`Dockerfile`** — run `truecopy-mcp` as a container. Because the gate needs a
   downstream server to gate, the image wraps the MCP reference server
   (`@modelcontextprotocol/server-everything`) and pins its tools at build time
