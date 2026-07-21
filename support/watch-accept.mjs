@@ -29,6 +29,20 @@ if (r.verdict === 'clean') {
 console.error(`${r.skill.name}: ${r.findings.length} finding(s)`);
 for (const f of r.findings) console.error(`  ${f.tool}: ${f.flags.join('; ')}`);
 
+// A skill hash is over RAW BYTES, so a Windows checkout with core.autocrlf=true
+// hashes CRLF and produces an entry the (LF) watch can NEVER match — the
+// acceptance silently never applies and the skill stays flagged forever. Refuse
+// rather than emit a hash that looks fine and is useless. Re-clone with
+// `git -c core.autocrlf=false clone ...` (or set it in the repo) and retry.
+const crlf = (r.skill.scanPieces || []).filter((p) => p.text.includes('\r\n'));
+if (crlf.length) {
+  console.error(`${dir}: refusing to emit an entry — ${crlf.length} file(s) contain CRLF`);
+  console.error('  A CRLF checkout hashes different bytes than the Linux watch, so this');
+  console.error('  entry would never match. Re-checkout with core.autocrlf=false.');
+  for (const p of crlf.slice(0, 5)) console.error(`    ${p.path}`);
+  process.exit(2);
+}
+
 const reviewed = new Date().toISOString().slice(0, 10);
 const entry = { class: 'FILL ME IN', note: 'FILL ME IN', reviewed };
 
