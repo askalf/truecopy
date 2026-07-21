@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scan, scanSkill, skillHash, discoverMarketplaceSkills } from '../src/index.mjs';
+import { evidenceOf } from './evidence.mjs';
 
 const ADVISORY_ROWS_SHOWN = 80; // WATCH.md stays readable; results.json has every row
 
@@ -109,6 +110,12 @@ const advisoryRows = [];
 // validated but 'constructor'-shaped ones must stay plain data keys.
 const manifestSkills = Object.create(null);
 let advisoryCount = 0;
+
+// evidenceOf() (support/evidence.mjs) locates each finding hit in the pinned source
+// and verifies it — dropping any that don't exist in the bytes and reporting the
+// count. That published `evidenceMismatches` is the confabulation guard.
+let evidenceMismatches = 0;
+
 for (const s of skills) {
   const r = scan(s.dir);
   manifestSkills[s.name] = skillHash(r.skill);
@@ -116,17 +123,19 @@ for (const s of skills) {
   advisoryCount += advisories.length;
   if (r.verdict !== 'clean') {
     const findings = r.findings.map((f) => `${f.tool}: ${f.flags.join('; ')}`);
+    const ev = evidenceOf(r.findings, r.skill); evidenceMismatches += ev.mismatches;
     const a = accepted[s.name];
-    if (a && covers(a, r.skill)) acceptedRows.push({ name: s.name, findings, class: a.class, note: a.note, ...(a.granularity ? { granularity: a.granularity } : {}) });
-    else flaggedRows.push({ name: s.name, verdict: r.verdict, findings });
+    if (a && covers(a, r.skill)) acceptedRows.push({ name: s.name, findings, class: a.class, note: a.note, evidence: ev.evidence, ...(a.granularity ? { granularity: a.granularity } : {}) });
+    else flaggedRows.push({ name: s.name, verdict: r.verdict, findings, evidence: ev.evidence });
   } else if (advisories.length) {
-    advisoryRows.push({ name: s.name, advisories });
+    const ev = evidenceOf(r.advisories, r.skill); evidenceMismatches += ev.mismatches;
+    advisoryRows.push({ name: s.name, advisories, evidence: ev.evidence });
   }
 }
 
 const scannedAt = new Date().toISOString();
 const poisoned = flaggedRows.length;
-const summary = { scannedAt, plugins, skills: skills.length, poisoned, accepted: acceptedRows.length, advisories: advisoryCount, pinDrift: pinDrift.length, fetchErrors: fetchErrors.length };
+const summary = { scannedAt, plugins, skills: skills.length, poisoned, accepted: acceptedRows.length, advisories: advisoryCount, pinDrift: pinDrift.length, fetchErrors: fetchErrors.length, evidenceMismatches };
 
 fs.mkdirSync(outDir, { recursive: true });
 const write = (name, data) => fs.writeFileSync(path.join(outDir, name), data);

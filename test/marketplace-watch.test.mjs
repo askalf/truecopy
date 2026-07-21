@@ -9,6 +9,7 @@ import { normalizeCatalog } from '../support/marketplace-fetch.mjs';
 
 const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-watch-test-'));
 const WATCH = fileURLToPath(new URL('../support/marketplace-watch.mjs', import.meta.url));
+const EVIDENCE = fileURLToPath(new URL('../support/evidence.mjs', import.meta.url)); // watch imports ./evidence.mjs — stage it too
 const runWatch = (root, out) => spawnSync(process.execPath, [WATCH, root, out], { encoding: 'utf8' });
 
 const put = (p, body) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, body); };
@@ -159,6 +160,7 @@ test('accepted findings pass for exactly those bytes and re-flag on drift', asyn
   fs.mkdirSync(stage, { recursive: true });
   const staged = path.join(stage, 'marketplace-watch.mjs');
   fs.copyFileSync(WATCH, staged);
+  fs.copyFileSync(EVIDENCE, path.join(stage, 'evidence.mjs'));
   fs.cpSync(fileURLToPath(new URL('../src', import.meta.url)), path.join(baseDir, 'src'), { recursive: true });
   fs.cpSync(fileURLToPath(new URL('../node_modules', import.meta.url)), path.join(baseDir, 'node_modules'), { recursive: true });
   const hash = skillHash(scan(path.join(dir, 'skills', 'sneaky')).skill);
@@ -195,6 +197,7 @@ function stageWatch(name, acceptedMap) {
   fs.mkdirSync(stage, { recursive: true });
   const staged = path.join(stage, 'marketplace-watch.mjs');
   fs.copyFileSync(WATCH, staged);
+  fs.copyFileSync(EVIDENCE, path.join(stage, 'evidence.mjs'));
   if (!fs.existsSync(path.join(baseDir, 'src'))) fs.cpSync(fileURLToPath(new URL('../src', import.meta.url)), path.join(baseDir, 'src'), { recursive: true });
   if (!fs.existsSync(path.join(baseDir, 'node_modules'))) fs.cpSync(fileURLToPath(new URL('../node_modules', import.meta.url)), path.join(baseDir, 'node_modules'), { recursive: true });
   fs.writeFileSync(path.join(stage, 'watch-accepted.json'), JSON.stringify(acceptedMap));
