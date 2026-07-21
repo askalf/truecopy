@@ -11,7 +11,7 @@
 // clean). If that remainder still flags — e.g. a finding only matches across a
 // file boundary — the helper refuses per-file mode rather than emit an entry
 // that silences something no single file carries.
-import { scan, scanSkill, skillHash } from '../src/index.mjs';
+import { scan, scanSkill, skillHash, joinScanText } from '../src/index.mjs';
 
 const args = process.argv.slice(2);
 const wantFiles = args.includes('--files');
@@ -42,7 +42,7 @@ if (!pieces.length) {
   console.error(`${dir}: not a skill directory — per-file granularity needs one`);
   process.exit(2);
 }
-const scanOne = (ps) => scanSkill({ kind: 'skill', name: r.skill.name, scanTargets: [{ name: r.skill.name, description: ps.map((p) => p.text).join('\n') }] });
+const scanOne = (ps) => scanSkill({ kind: 'skill', name: r.skill.name, scanTargets: [{ name: r.skill.name, description: joinScanText(ps) }] });
 const bearing = pieces.filter((p) => scanOne([p]).verdict !== 'clean');
 if (scanOne(pieces.filter((p) => !bearing.includes(p))).verdict !== 'clean') {
   console.error(`${dir}: findings not attributable to individual files — use the whole-skill hash entry`);

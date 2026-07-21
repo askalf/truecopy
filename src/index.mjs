@@ -1,14 +1,14 @@
 // canon — own your agent skills. Vet (scan), pin (lock + hash), and verify
 // (drift) every skill & MCP server before it runs. The supply-chain gate that
 // pairs with warden's runtime firewall: vet it → contain it.
-import { loadSkill, skillHash } from './skill.mjs';
+import { loadSkill, skillHash, joinScanText, PIECE_JOIN } from './skill.mjs';
 import { scanSkill, detectionInfo } from './scan.mjs';
 import { readLock, writeLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock } from './lock.mjs';
 import { signHash, verifyHashSig, keyId, ensureKey } from './sign.mjs';
 import { loadTrust, trustedSigner, trustKey, untrustKey, listTrust } from './trust.mjs';
 import { sha256, canonicalJson } from './hash.mjs';
 
-export { loadSkill, skillHash, scanSkill, detectionInfo, readLock, writeLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock };
+export { loadSkill, skillHash, joinScanText, PIECE_JOIN, scanSkill, detectionInfo, readLock, writeLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock };
 export { signHash, verifyHashSig, keyId, ensureKey };
 export { loadTrust, trustedSigner, trustKey, untrustKey, listTrust };
 export { claudeSkillRoots, discoverClaudeSkills, discoverClaudePluginSkills, discoverMarketplaceSkills, resolveClaudeSkill } from './claude.mjs';

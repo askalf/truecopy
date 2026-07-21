@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scan, scanSkill, skillHash, discoverMarketplaceSkills } from '../src/index.mjs';
+import { scan, scanSkill, skillHash, joinScanText, discoverMarketplaceSkills } from '../src/index.mjs';
 import { evidenceOf } from './evidence.mjs';
 
 const ADVISORY_ROWS_SHOWN = 80; // WATCH.md stays readable; results.json has every row
@@ -48,7 +48,7 @@ function covers(a, skill) {
   const hashOf = Object.fromEntries((skill.files || []).map((f) => [f.path, f.hash]));
   const rest = (skill.scanPieces || []).filter((p) => hashOf[p.path] !== reviewed[p.path]);
   if (!rest.length) return true;
-  const s = scanSkill({ kind: 'skill', name: skill.name, scanTargets: [{ name: skill.name, description: rest.map((p) => p.text).join('\n') }] });
+  const s = scanSkill({ kind: 'skill', name: skill.name, scanTargets: [{ name: skill.name, description: joinScanText(rest) }] });
   return s.verdict === 'clean';
 }
 
