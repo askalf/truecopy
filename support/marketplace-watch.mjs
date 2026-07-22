@@ -28,8 +28,22 @@ const ADVISORY_ROWS_SHOWN = 80; // WATCH.md stays readable; results.json has eve
 // `"granularity": "finding-files"` + `"files": { <path>: <sha256>, … }`: the
 // acceptance is keyed to the reviewed finding-bearing files instead of the
 // whole-skill hash, so an unrelated upstream docs release no longer lapses it.
+// When the churning file IS the finding-bearing file, neither helps — see
+// `finding-flags` below (#87).
 let accepted = {};
 try { accepted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('watch-accepted.json', import.meta.url)), 'utf8')); } catch { /* no accept file = accept nothing */ }
+
+const scanPieces = (skill, pieces) =>
+  scanSkill({ kind: 'skill', name: skill.name, scanTargets: [{ name: skill.name, description: joinScanText(pieces) }] });
+
+// `finding-flags` acceptance lapses on a mandatory date, and an entry may not
+// hold one further out than this. It is the only granularity that survives a
+// content change, so it is the only one where "reviewed once" could otherwise
+// mean "never looked at again" — the cap forces the reviewer back on a schedule
+// instead of leaving a standing exemption in the file.
+const MAX_FLAG_ACCEPT_DAYS = 90;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 // Does an accept entry still cover this scanned skill?
 //   whole-skill (default) — `hash` must equal today's skill hash: any byte
@@ -42,14 +56,71 @@ try { accepted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('watch-accepte
 //   fixtures re-flag), and a new finding in a new or changed file flags on its
 //   own. An entry with no usable `files` map excludes nothing — the remainder is
 //   the whole flagged skill, so it fails closed.
+//   finding-flags — the reviewed files may DRIFT, but only within the reviewed
+//   set of flags. See coversFlags().
 function covers(a, skill) {
+  if (a.granularity === 'finding-flags') return coversFlags(a, skill);
   if (a.granularity !== 'finding-files') return a.hash === skillHash(skill);
   const reviewed = (a.files && typeof a.files === 'object') ? a.files : {};
   const hashOf = Object.fromEntries((skill.files || []).map((f) => [f.path, f.hash]));
   const rest = (skill.scanPieces || []).filter((p) => hashOf[p.path] !== reviewed[p.path]);
   if (!rest.length) return true;
-  const s = scanSkill({ kind: 'skill', name: skill.name, scanTargets: [{ name: skill.name, description: joinScanText(rest) }] });
-  return s.verdict === 'clean';
+  return scanPieces(skill, rest).verdict === 'clean';
+}
+
+/**
+ * finding-flags (#87) — for a vendor whose finding-bearing FILE is the thing
+ * that churns. Neither hash- nor file-keyed acceptance helps there: the only
+ * file changing upstream is the one carrying the findings, so every edit lapses
+ * the review and re-publishes a "poisoned" claim naming the vendor until a human
+ * re-reads bytes they have already read (AWS's HyperPod NCCL skill produced
+ * three distinct hashes in a few hours).
+ *
+ * The entry names the files it reviewed and the flags it accepted:
+ *   { granularity: 'finding-flags', files: [ <path>, … ], flags: [ <flag>, … ],
+ *     expires: 'YYYY-MM-DD', reviewedHash: <sha256>, class, note, reviewed }
+ *
+ * `reviewedHash` is the skill hash the reviewer actually read. It does NOT gate
+ * acceptance — gating on it would just be the whole-skill entry again — but the
+ * watch reports `drifted` when today's bytes differ, so an accepted-by-flag skill
+ * that the vendor has since edited stays visible as such instead of going quiet.
+ *
+ * It holds only while ALL of these are true — any one failing re-flags:
+ *   - every listed file is still present in the skill;
+ *   - everything OUTSIDE the listed files scans clean, so a finding anywhere
+ *     else in the skill flags normally (the same remainder proof finding-files
+ *     relies on);
+ *   - the listed files, scanned together, still produce findings, and every flag
+ *     they produce is one the reviewer enumerated — a NEW flag re-flags;
+ *   - `expires` is a real date, not past, and no further out than
+ *     MAX_FLAG_ACCEPT_DAYS.
+ *
+ * KNOWN LIMIT, deliberately accepted (askalf/redstamp#84): a genuinely malicious
+ * change to a reviewed file that produces only an already-reviewed flag would be
+ * covered until the entry expires. That is the price of not shipping a detector
+ * downgrade, and it was the cheaper risk: every severity heuristic tried for this
+ * FP was evadable by writing a decoy string, which hands the attacker a switch to
+ * turn detection off for EVERY skill. This confines the weaker guarantee to
+ * named files, named flags, and a bounded window, and it stays visible as such on
+ * the public board.
+ */
+function coversFlags(a, skill, now = Date.now()) {
+  if (!ISO_DATE.test(String(a.expires || ''))) return false;
+  if (a.expires < isoDay(now)) return false;                            // lapsed
+  if (a.expires > isoDay(now + MAX_FLAG_ACCEPT_DAYS * 86400000)) return false; // over-long
+  const flags = new Set(Array.isArray(a.flags) ? a.flags : []);
+  const files = new Set(Array.isArray(a.files) ? a.files : []);
+  if (!flags.size || !files.size) return false;
+  const pieces = skill.scanPieces || [];
+  const inside = pieces.filter((p) => files.has(p.path));
+  if (inside.length !== files.size) return false;   // a reviewed file was renamed or removed
+  const outside = pieces.filter((p) => !files.has(p.path));
+  if (outside.length && scanPieces(skill, outside).verdict !== 'clean') return false;
+  const got = scanPieces(skill, inside);
+  // No findings in the reviewed files, yet the whole skill flagged: the finding
+  // is an artifact of something outside them. Fail closed rather than silence it.
+  if (!got.findings.length) return false;
+  return got.findings.every((f) => (f.flags || []).every((w) => flags.has(w)));
 }
 
 // evidenceOf() locates matches against `skill.scanPieces`, which are paths
@@ -137,7 +208,12 @@ for (const s of skills) {
     const ev = evidenceOf(r.findings, r.skill); evidenceMismatches += ev.mismatches;
     const evidence = withRepoPaths(ev.evidence, s.skillPath);
     const a = accepted[s.name];
-    if (a && covers(a, r.skill)) acceptedRows.push({ name: s.name, findings, class: a.class, note: a.note, evidence, ...(a.granularity ? { granularity: a.granularity } : {}) });
+    if (a && covers(a, r.skill)) acceptedRows.push({
+      name: s.name, findings, class: a.class, note: a.note, evidence,
+      ...(a.granularity ? { granularity: a.granularity } : {}),
+      ...(a.expires ? { expires: a.expires } : {}),
+      ...(a.reviewedHash ? { drifted: a.reviewedHash !== skillHash(r.skill) } : {}),
+    });
     else flaggedRows.push({ name: s.name, verdict: r.verdict, findings, evidence });
   } else if (advisories.length) {
     const ev = evidenceOf(r.advisories, r.skill); evidenceMismatches += ev.mismatches;
@@ -200,8 +276,12 @@ if (acceptedRows.length) {
   md.push('');
   md.push('Skills whose findings were manually reviewed and accepted for **exactly these bytes** ([watch-accepted.json](https://github.com/askalf/truecopy/blob/master/support/watch-accepted.json), truecopy\'s `--force` semantics) — any content change re-flags them. Entries marked *per-file* key the acceptance to the reviewed finding-bearing files instead: those files changing re-flags, and everything else in the skill must still scan clean, but unrelated upstream churn no longer lapses the review.');
   md.push('');
+  md.push('Entries marked *per-flag* are the weakest of the three and say so: the reviewed file may change, and the acceptance holds while the flags it produces stay within the reviewed set. Used only where the finding-bearing file is itself the thing that churns. Everything outside the reviewed files must still scan clean, a **new** flag re-flags, the entry lapses on the date shown — at which point a human re-reads it or it goes back on the board — and *changed since review* means the vendor has edited the skill since the bytes a human actually read.');
+  md.push('');
   for (const r of acceptedRows) {
-    md.push(`- **${r.name}** — ${r.findings.join(' · ')} — *${r.class}${r.note ? `: ${r.note}` : ''}*${r.granularity === 'finding-files' ? ' *(per-file)*' : ''}`);
+    const gran = r.granularity === 'finding-files' ? ' *(per-file)*'
+      : r.granularity === 'finding-flags' ? ` *(per-flag, expires ${r.expires}${r.drifted ? ', changed since review' : ''})*` : '';
+    md.push(`- **${r.name}** — ${r.findings.join(' · ')} — *${r.class}${r.note ? `: ${r.note}` : ''}*${gran}`);
   }
   md.push('');
 }

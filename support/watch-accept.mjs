@@ -4,6 +4,7 @@
 //
 //   node support/watch-accept.mjs <skill-dir>           # whole-skill hash entry
 //   node support/watch-accept.mjs <skill-dir> --files   # per-file granularity (#68)
+//   node support/watch-accept.mjs <skill-dir> --flags   # per-flag granularity (#87)
 //
 // --files keys the acceptance to the finding-bearing files: each file is scanned
 // alone to attribute the findings, then the attribution is verified with exactly
@@ -11,14 +12,24 @@
 // clean). If that remainder still flags — e.g. a finding only matches across a
 // file boundary — the helper refuses per-file mode rather than emit an entry
 // that silences something no single file carries.
+//
+// --flags is the same attribution, but records the FLAGS instead of the file
+// hashes: the reviewed files may then change, and the acceptance holds only
+// while the flags they produce stay inside the reviewed set. For vendors whose
+// finding-bearing file is itself what churns, where --files buys nothing. It is
+// the weakest granularity, so it carries a mandatory expiry — read the entry
+// contract in marketplace-watch.mjs (coversFlags) before reaching for it.
 import { spawnSync } from 'node:child_process';
 import { scan, scanSkill, skillHash, joinScanText } from '../src/index.mjs';
 
+const ACCEPT_DAYS = 90; // must stay <= MAX_FLAG_ACCEPT_DAYS in marketplace-watch.mjs
+
 const args = process.argv.slice(2);
 const wantFiles = args.includes('--files');
-const dir = args.find((a) => a !== '--files');
-if (!dir) {
-  console.error('usage: watch-accept.mjs <skill-dir> [--files]');
+const wantFlags = args.includes('--flags');
+const dir = args.find((a) => a !== '--files' && a !== '--flags');
+if (!dir || (wantFiles && wantFlags)) {
+  console.error('usage: watch-accept.mjs <skill-dir> [--files | --flags]');
   process.exit(2);
 }
 
@@ -70,14 +81,14 @@ if (converted && converted.length) {
 const reviewed = new Date().toISOString().slice(0, 10);
 const entry = { class: 'FILL ME IN', note: 'FILL ME IN', reviewed };
 
-if (!wantFiles) {
+if (!wantFiles && !wantFlags) {
   console.log(JSON.stringify({ hash: skillHash(r.skill), ...entry }, null, 2));
   process.exit(0);
 }
 
 const pieces = r.skill.scanPieces || [];
 if (!pieces.length) {
-  console.error(`${dir}: not a skill directory — per-file granularity needs one`);
+  console.error(`${dir}: not a skill directory — per-file/per-flag granularity needs one`);
   process.exit(2);
 }
 const scanOne = (ps) => scanSkill({ kind: 'skill', name: r.skill.name, scanTargets: [{ name: r.skill.name, description: joinScanText(ps) }] });
@@ -86,6 +97,28 @@ if (scanOne(pieces.filter((p) => !bearing.includes(p))).verdict !== 'clean') {
   console.error(`${dir}: findings not attributable to individual files — use the whole-skill hash entry`);
   process.exit(2);
 }
+
+if (wantFlags) {
+  // The flags the reviewed files actually produce, scanned exactly as the watch
+  // scans them (together, through the same piece join) — never a hand-typed list.
+  const flags = [...new Set(scanOne(bearing).findings.flatMap((f) => f.flags || []))].sort();
+  if (!flags.length) {
+    console.error(`${dir}: the finding-bearing files produce no flags on their own — use the whole-skill hash entry`);
+    process.exit(2);
+  }
+  const expires = new Date(Date.now() + ACCEPT_DAYS * 86400000).toISOString().slice(0, 10);
+  console.error(`finding-bearing files: ${bearing.map((p) => p.path).join(', ')}`);
+  console.error(`accepted flags       : ${flags.join(' | ')}`);
+  console.error(`expires              : ${expires} (${ACCEPT_DAYS}d) — re-review or it goes back on the board`);
+  console.error('Read EVERY listed file end to end before pasting this: the files may change under it.');
+  console.log(JSON.stringify({
+    granularity: 'finding-flags', files: bearing.map((p) => p.path), flags, expires,
+    reviewedHash: skillHash(r.skill), // audit anchor + drift reporting; does NOT gate acceptance
+    ...entry,
+  }, null, 2));
+  process.exit(0);
+}
+
 const hashOf = Object.fromEntries(r.skill.files.map((f) => [f.path, f.hash]));
 const files = Object.fromEntries(bearing.map((p) => [p.path, hashOf[p.path]]));
 console.error(`finding-bearing files: ${Object.keys(files).join(', ') || '(none)'}`);

@@ -6,7 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Bumped the `@askalf/redstamp` pin** to pick up the case-sensitive
+  `SECRET_ENV_RE` (redstamp#83, closes half of #87). Environment variables are
+  `UPPER_SNAKE` by universal convention; the case-insensitive form read ordinary
+  local variables (`$token`, `$key`, `${apiKey}`) as credentials. Measured over
+  the 2026-07-21 watch (269 plugins / 1848 skills): 102 of 301 recorded
+  `reads a secret env var` hits are lowercase locals that stop matching, while
+  all 199 genuine `UPPER_SNAKE` hits still flag. The narrowed pattern can only
+  ever match *less*, so no skill can newly flag and no acceptance can lapse
+  because of it.
+
 ### Added
+- **Per-flag acceptance granularity for the watch** (#87) — for a vendor whose
+  finding-bearing *file* is the thing that churns, where neither the whole-skill
+  hash nor per-file granularity (#68) helps. An entry
+  (`"granularity": "finding-flags"`) names the files it reviewed and the flags it
+  accepted; those files may then change, and the acceptance holds only while the
+  flags they produce stay inside the reviewed set. Everything outside them must
+  still scan clean, a **new** flag re-flags, a reviewed file that disappears
+  fails closed, and the entry carries a mandatory expiry capped at 90 days.
+  `reviewedHash` records the bytes a human actually read, so the watch reports
+  `drifted` once the vendor edits — a per-flag acceptance stays visible instead
+  of going quiet. Authored by `watch-accept.mjs --flags`, which measures the flag
+  set from the bytes rather than trusting a hand-typed list.
 - **Per-finding evidence — `scan` now reports *what* it matched, and where.**
   Findings and advisories carry an `evidence` array of
   `{ flag, text, file, line }`: the exact matched fragment, capped at 160

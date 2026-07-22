@@ -116,10 +116,19 @@
     "reviewed": "2026-07-09"
   },
   "sagemaker-ai:hyperpod-nccl": {
-    "hash": "a22a54fcb17890f3a6f87f2900f256607a42fea98e4c3be0971a863f2a18284c",
+    "granularity": "finding-flags",
+    "files": [
+      "scripts/nccl-diagnose.sh"
+    ],
+    "flags": [
+      "obfuscated payload to shell",
+      "reads a secret env var"
+    ],
+    "expires": "2026-10-20",
+    "reviewedHash": "a22a54fcb17890f3a6f87f2900f256607a42fea98e4c3be0971a863f2a18284c",
     "class": "obfuscated remote-exec transport",
-    "note": "Re-reviewed 2026-07-21 after AWS changed the skill (the 2026-07-09 acceptance lapsed on content drift, exactly as intended). Both flags are false positives, verified against the bytes at the catalog pin. (1) 'obfuscated payload to shell' - nccl-diagnose.sh base64-encodes its OWN locally-defined $script_body to ship it over AWS SSM, because SSM's command parameter takes a single element; the comment above the line says so, and there is no remote fetch anywhere in the pipeline (contrast the real threat shape, curl <url> | base64 -d | bash). (2) 'reads a secret env var' - $token is an AWS API pagination cursor passed to --next-token and validated against a base64 shape; it is a local loop variable, not a credential. Detector-side fixes for both FP classes tracked separately. Hash corrected 2026-07-21: the first re-accept recorded a hash computed on a Windows checkout with core.autocrlf=true, which hashes CRLF bytes and can never match the Linux watch (LF). Recomputed with autocrlf disabled.",
-    "reviewed": "2026-07-21"
+    "note": "Per-flag acceptance (#87) after the whole-skill hash lapsed twice on the SAME two reviewed-benign flags — AWS produced three distinct skill hashes in a few hours on 2026-07-21, and the only file changing upstream is the finding-bearing one, so per-file granularity (#68) would buy nothing. Both flags re-verified against the bytes at catalog pin 153b28e. (1) 'obfuscated payload to shell' — scripts/nccl-diagnose.sh:1499 base64-encodes its OWN locally-built $script_body and decodes it on the remote host at :1500, because AWS-StartNonInteractiveCommand collapses newlines in a single command element; the comment two lines above says exactly that, and nothing is fetched (contrast the real threat shape, curl <url> | base64 -d | bash). (2) 'reads a secret env var' — since the redstamp bump killed the lowercase-$token FP this now matches ${NCCL_PAT_KEYS[...]} at :1049, a local bash array declared at :940 holding NCCL log-error patterns ('Timeout waiting for', 'Connection refused', …). PAT = pattern; nothing is read from the environment. Everything outside nccl-diagnose.sh must still scan clean, a NEW flag re-flags, and this lapses on 2026-10-20.",
+    "reviewed": "2026-07-22"
   },
   "sagemaker-ai:hyperpod-node-debugger": {
     "hash": "f0966418e64944fb83c79875101f1386bfbc32db80b833c703b86f6666d269bc",

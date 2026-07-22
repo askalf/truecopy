@@ -18,7 +18,7 @@
     "demo": "node demo/demo.mjs"
   },
   "dependencies": {
-    "@askalf/redstamp": "github:askalf/redstamp#cf2ce7502d56d7ece6ac264b38032221b7ca0894"
+    "@askalf/redstamp": "github:askalf/redstamp#de60b132c20e78ea927833af85847d4a4fb8c654"
   },
   "devDependencies": {
     "@jazzer.js/core": "^4.0.0"
