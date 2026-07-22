@@ -4,7 +4,13 @@
 // Only vetted, unmodified, unpoisoned tools reach the client. (`canon-mcp` still
 // works as an alias; an existing canon.lock is read automatically.)
 import { runGate } from './mcp.mjs';
+import { runStandalone } from './mcp-serve.mjs';
+import { createRequire } from 'node:module';
 import { resolveLock } from './lock.mjs';
+
+const VERSION = (() => {
+  try { return createRequire(import.meta.url)('../package.json').version; } catch { return '0.0.0'; }
+})();
 
 const argv = process.argv.slice(2);
 const sep = argv.indexOf('--');
@@ -17,8 +23,22 @@ const opt = (n, d) => {
   return eq ? eq.slice(n.length + 1) : d;
 };
 
-if (!cmd.length || pre.includes('-h') || pre.includes('--help')) {
-  process.stderr.write('usage: truecopy-mcp [--lock truecopy.lock] [--name <pinned>] [--strict] -- <mcp-server cmd...>\n');
-  process.exit(cmd.length ? 0 : 2);
+if (pre.includes('-h') || pre.includes('--help')) {
+  process.stderr.write(
+    'usage: truecopy-mcp [--lock truecopy.lock] [--name <pinned>] [--strict] -- <mcp-server cmd...>\n' +
+    '       truecopy-mcp [--lock truecopy.lock]            (standalone: serve truecopy own tools)\n');
+  process.exit(0);
 }
-runGate({ command: cmd[0], args: cmd.slice(1), lockPath: resolveLock(opt('--lock', null) || null), name: opt('--name', null) || null, strict: !!opt('--strict', false) });
+
+const lockPath = resolveLock(opt('--lock', null) || null);
+
+// No downstream command => STANDALONE. This previously exited 2. A bare gate has
+// nothing of its own to advertise, which is why the container image had to wrap a
+// reference server just to expose a tool surface at all; standalone serves
+// truecopy's own read-only tools instead. The proxy path below is UNCHANGED --
+// the fail-closed gating that protects a live downstream is not touched.
+if (!cmd.length) {
+  runStandalone({ lockPath, version: VERSION });
+} else {
+  runGate({ command: cmd[0], args: cmd.slice(1), lockPath, name: opt('--name', null) || null, strict: !!opt('--strict', false) });
+}
