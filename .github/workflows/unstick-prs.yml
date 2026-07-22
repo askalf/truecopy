@@ -1,0 +1,132 @@
+# Advance approved pull requests that fell behind master.
+#
+# `master protection` requires branches to be up to date (Scorecard credits that
+# at its top Branch-Protection tier, so it stays on). GitHub's auto-merge does
+# NOT update a stale branch — so a PR that is approved, green, and has auto-merge
+# armed can still sit at `BEHIND` indefinitely, waiting for something that will
+# never happen on its own. Observed 2026-07-22: PR #94 was armed at 12:48Z and
+# only merged at 15:14Z, after a hand-run `gh pr update-branch`. #92 and #96 hit
+# the same wall the same day. With several sessions landing work in parallel,
+# every PR not merged within minutes of approval hits it.
+#
+# This closes only that gap. It touches a PR when ALL of these hold:
+#   - open, not a draft
+#   - mergeStateStatus == BEHIND (purely mechanical: nothing about it is wrong)
+#   - auto-merge is armed — someone already said "land this when it's ready", so
+#     updating the branch finishes a decision that was already made
+# It never merges, never approves, and never touches a PR whose checks are
+# failing (UNSTABLE), whose review is missing (BLOCKED), or that conflicts
+# (DIRTY). Long-lived PRs without auto-merge are left alone rather than having
+# CI re-run under them every half hour.
+#
+# ── Why this needs PR_SWEEP_TOKEN and not GITHUB_TOKEN ────────────────────────
+# Updating a branch pushes a merge commit to the PR head. Per GitHub's recursion
+# rules, "when a pull request is created or updated by a workflow using
+# GITHUB_TOKEN, pull_request events with the opened, synchronize, or reopened
+# activity types create workflow runs that require approval." Required checks
+# would therefore re-run only after a human approved them — trading a stall for a
+# stall. A user/app token pushes as a normal actor, so CI re-runs immediately and
+# auto-merge completes on its own.
+#
+# PR_SWEEP_TOKEN wants exactly two fine-grained permissions on this repo:
+#   Contents: read/write   (the update-branch merge commit)
+#   Pull requests: read/write
+# Without the secret this workflow no-ops loudly rather than half-working.
+#
+# NOTE (verified on #94 and #96, 2026-07-22): an update-branch merge does NOT
+# dismiss the existing approval here, even though the ruleset sets
+# `dismiss_stale_reviews_on_push` and `require_last_push_approval` — GitHub does
+# not treat a base-branch merge as a reviewable push by the author. That is what
+# makes this safe to automate; if that behaviour ever changes this would start
+# stripping approvals and should be reconsidered. Deliberately a merge, not a
+# rebase: a rebase rewrites the author's commits and would dismiss the review.
+#
+# First run: dispatch it with `dry_run: true`. That prints every open PR with the
+# three fields the filter reads, plus what it would have updated, and changes
+# nothing — the selection was not exercisable before merge because no BEHIND pull
+# request existed anywhere in the fleet to test against.
+name: unstick-prs
+
+on:
+  schedule:
+    - cron: '17,47 * * * *' # off the hour — :00 is the most contended slot on Actions
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List what would be updated, change nothing'
+        type: boolean
+        default: false
+
+# The job authenticates as PR_SWEEP_TOKEN; GITHUB_TOKEN needs nothing.
+permissions:
+  contents: read
+
+concurrency:
+  group: unstick-prs
+  cancel-in-progress: false
+
+jobs:
+  update-behind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Update approved PRs sitting behind master
+        env:
+          GH_TOKEN: ${{ secrets.PR_SWEEP_TOKEN }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice::PR_SWEEP_TOKEN is not set — nothing to do. See this file's header for the two permissions it needs."
+            echo 'PR_SWEEP_TOKEN not configured — sweep skipped.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # gh's own jq engine — no external jq, so this is the same expression
+          # that can be run and checked from a workstation.
+          FIELDS='number,title,isDraft,mergeStateStatus,autoMergeRequest'
+          # mergeStateStatus is computed lazily and reads UNKNOWN while GitHub is
+          # still thinking; those are simply picked up on the next run.
+          SELECT='.[] | select(.isDraft == false and .mergeStateStatus == "BEHIND" and .autoMergeRequest != null)'
+
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo '## Dry run — every open PR, as the filter sees it' >> "$GITHUB_STEP_SUMMARY"
+            echo '| PR | draft | mergeStateStatus | auto-merge | title |' >> "$GITHUB_STEP_SUMMARY"
+            echo '|---|---|---|---|---|' >> "$GITHUB_STEP_SUMMARY"
+            gh pr list --repo "$REPO" --state open --limit 100 --json "$FIELDS" \
+              --jq '.[] | "| #\(.number) | \(.isDraft) | \(.mergeStateStatus) | \(if .autoMergeRequest then "armed" else "—" end) | \(.title) |"' \
+              >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '### Would update' >> "$GITHUB_STEP_SUMMARY"
+            gh pr list --repo "$REPO" --state open --limit 100 --json "$FIELDS" \
+              --jq "$SELECT | \"- #\(.number) \(.title)\"" | tee /tmp/would.txt >> "$GITHUB_STEP_SUMMARY"
+            [ -s /tmp/would.txt ] || echo '_nothing_' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          gh pr list --repo "$REPO" --state open --limit 100 --json "$FIELDS" \
+            --jq "$SELECT | [.number, .title] | @tsv" > behind.tsv
+
+          if [ ! -s behind.tsv ]; then
+            echo "no armed PR is behind — nothing to do"
+            echo 'Nothing behind.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo '| PR | title | result |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|---|---|---|' >> "$GITHUB_STEP_SUMMARY"
+
+          while IFS=$'\t' read -r number title; do
+            [ -n "$number" ] || continue
+            echo "updating #${number} — ${title}"
+            # A failure here is not fatal: a genuine conflict with master needs a
+            # human, and the other PRs in the sweep still deserve a try.
+            if gh pr update-branch "$number" --repo "$REPO"; then
+              echo "| #${number} | ${title} | updated |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning title=unstick-prs::could not update #${number} — likely a real conflict with master, needs a human"
+              echo "| #${number} | ${title} | **conflict — needs a human** |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done < behind.tsv
