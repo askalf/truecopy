@@ -1,0 +1,11 @@
+{
+  "name": "truecopy-mcp-image",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dependency set for the truecopy-mcp container image (Dockerfile). Not published; exists so the image installs from a hash-pinned lockfile via `npm ci` instead of an unpinned `npm i <pkg>@<version>`.",
+  "license": "MIT",
+  "dependencies": {
+    "@askalf/truecopy": "0.9.0",
+    "@modelcontextprotocol/server-everything": "2026.7.4"
+  }
+}

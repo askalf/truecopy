@@ -7,6 +7,25 @@ updates:
       day: monday
     open-pull-requests-limit: 5
 
+  # The container image's own dependency set (docker/package.json + lock), which
+  # the Dockerfile installs with `npm ci`. Separate from the root manifest: these
+  # are the packages that ship INSIDE the image, not truecopy's own deps.
+  - package-ecosystem: npm
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+
+  # The base image is pinned by digest, so nothing else would ever move it —
+  # without this, "pinned" quietly becomes "stuck on an unpatched node:22-slim".
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

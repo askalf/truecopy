@@ -37,6 +37,10 @@ test('integration: scan a real skill dir → evidence points at the true line', 
   const r = scan(dir);
   assert.equal(r.verdict, 'flagged');
   const { evidence, mismatches } = evidenceOf(r.findings, r.skill);
+  // A real scan must produce ZERO unverifiable hits — every published evidence
+  // item comes from a detector that just matched this text, so a mismatch here
+  // means the hit and the source drifted apart.
+  assert.equal(mismatches, 0, 'no confabulated hits on a real scan');
   const io = evidence.find((e) => e.flag === 'instruction-override');
   assert.ok(io, 'instruction-override evidence present');
   assert.match(io.match ?? io.text, /ignore previous instructions/i);
