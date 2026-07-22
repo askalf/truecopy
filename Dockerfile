@@ -14,7 +14,7 @@
 # that exists to make agents pin their supply chain has to pin its own. Dependabot
 # watches both (`docker` + `/docker` npm in .github/dependabot.yml), so the pins
 # get bumped deliberately instead of drifting silently.
-FROM node:22-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+FROM node:26-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583
 
 # @askalf/truecopy pulls @askalf/redstamp from GitHub, so git (+ CA certs for
 # HTTPS) must be present when npm resolves the dependency tree.
