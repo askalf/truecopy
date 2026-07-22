@@ -87,6 +87,31 @@ export function pieceAt(descIndex, pieces, join) {
   return null;
 }
 
+/** Does this hit's span fall inside the DESCRIPTION's region of the scan text?
+ *
+ *  A detector can legitimately match a field that is not the scanned files at
+ *  all. Real case: `chrome-devtools-mcp:memory-leak-debugging` matches
+ *  'exfiltration intent' on the substring "leak" — inside the tool's own NAME,
+ *  at offset 16, well before the description begins.
+ *
+ *  Such a hit is REAL and fully supported by the bytes; it simply has no file
+ *  and line to cite. That is a different thing from a detector claiming
+ *  something the bytes do not contain, and only the latter belongs in
+ *  `evidenceMismatches` — a counter whose whole job is to be an alarm. Folding
+ *  the former in would pin it permanently above zero and train everyone to
+ *  ignore it. Returns false when the answer cannot be established, so an
+ *  undecidable case still counts as a mismatch (fail loud, not quiet). */
+export function hitIsOutsideDescription(hit, { scanText, description }) {
+  if (!hit || typeof hit.start !== 'number' || typeof hit.end !== 'number') return false;
+  if (typeof scanText !== 'string' || typeof description !== 'string') return false;
+  const scanned = scannedDescription(description);
+  if (!scanned) return false;
+  const delta = scanText.indexOf(scanned.text);
+  if (delta < 0) return false;
+  if (scanText.indexOf(scanned.text, delta + 1) >= 0) return false; // ambiguous: don't claim
+  return hit.start < delta || hit.end > delta + scanned.text.length;
+}
+
 /** Locate a hit by offset.
  *
  *  `scanText` is the exact string the detector matched against (redstamp's

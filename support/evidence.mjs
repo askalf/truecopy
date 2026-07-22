@@ -10,7 +10,7 @@
 
 import { scanTextOf } from '@askalf/redstamp/mcp';
 import { joinScanText, PIECE_JOIN } from '../src/skill.mjs';
-import { locateByOffset } from './offset-map.mjs';
+import { locateByOffset, hitIsOutsideDescription } from './offset-map.mjs';
 
 export const EVIDENCE_CAP = 160;
 
@@ -110,9 +110,16 @@ export function evidenceOf(items, skill) {
       if (mappable && typeof h.start === 'number') {
         const at = locateByOffset(h, { scanText, description: target.description, pieces, join: PIECE_JOIN });
         if (at) { evidence.push({ flag: h.flag, text: cap(at.text), file: at.file, line: at.line }); continue; }
-        // Offsets were present but did not attribute. Do NOT fall back to a text
-        // search: that is what published citations pointing at unrelated lines
-        // (#100). An honest mismatch beats a confident wrong line.
+        // A hit can legitimately match a field that is not a scanned FILE — a
+        // tool's own `name`, for instance (`memory-leak-debugging` matches
+        // 'exfiltration intent' on "leak"). Real, supported by the bytes, and
+        // simply not citable to a line. `mismatches` is the confabulation alarm,
+        // so that case must not inflate it — otherwise the alarm sits
+        // permanently above zero and everyone learns to ignore it.
+        if (hitIsOutsideDescription(h, { scanText, description: target.description })) continue;
+        // Offsets were present and should have attributed, but did not. Do NOT
+        // fall back to a text search: that is what produced citations pointing at
+        // unrelated lines (#100). An honest mismatch beats a confident wrong line.
         mismatches++;
         continue;
       }
