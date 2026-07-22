@@ -10,6 +10,14 @@ import { normalizeCatalog } from '../support/marketplace-fetch.mjs';
 const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canon-watch-test-'));
 const WATCH = fileURLToPath(new URL('../support/marketplace-watch.mjs', import.meta.url));
 const EVIDENCE = fileURLToPath(new URL('../support/evidence.mjs', import.meta.url)); // watch imports ./evidence.mjs — stage it too
+const OFFSETMAP = fileURLToPath(new URL('../support/offset-map.mjs', import.meta.url)); // …and evidence.mjs imports ./offset-map.mjs
+// Stage the whole support chain, not just the entry point: a module added to
+// that chain otherwise fails here as a confusing ERR_MODULE_NOT_FOUND in a temp
+// directory rather than as the real 'you forgot to stage it'.
+const stageSupport = (stage) => {
+  fs.copyFileSync(EVIDENCE, path.join(stage, 'evidence.mjs'));
+  fs.copyFileSync(OFFSETMAP, path.join(stage, 'offset-map.mjs'));
+};
 const runWatch = (root, out) => spawnSync(process.execPath, [WATCH, root, out], { encoding: 'utf8' });
 
 const put = (p, body) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, body); };
@@ -179,7 +187,7 @@ test('accepted findings pass for exactly those bytes and re-flag on drift', asyn
   fs.mkdirSync(stage, { recursive: true });
   const staged = path.join(stage, 'marketplace-watch.mjs');
   fs.copyFileSync(WATCH, staged);
-  fs.copyFileSync(EVIDENCE, path.join(stage, 'evidence.mjs'));
+  stageSupport(stage);
   fs.cpSync(fileURLToPath(new URL('../src', import.meta.url)), path.join(baseDir, 'src'), { recursive: true });
   fs.cpSync(fileURLToPath(new URL('../node_modules', import.meta.url)), path.join(baseDir, 'node_modules'), { recursive: true });
   const hash = skillHash(scan(path.join(dir, 'skills', 'sneaky')).skill);
@@ -216,7 +224,7 @@ function stageWatch(name, acceptedMap) {
   fs.mkdirSync(stage, { recursive: true });
   const staged = path.join(stage, 'marketplace-watch.mjs');
   fs.copyFileSync(WATCH, staged);
-  fs.copyFileSync(EVIDENCE, path.join(stage, 'evidence.mjs'));
+  stageSupport(stage);
   if (!fs.existsSync(path.join(baseDir, 'src'))) fs.cpSync(fileURLToPath(new URL('../src', import.meta.url)), path.join(baseDir, 'src'), { recursive: true });
   if (!fs.existsSync(path.join(baseDir, 'node_modules'))) fs.cpSync(fileURLToPath(new URL('../node_modules', import.meta.url)), path.join(baseDir, 'node_modules'), { recursive: true });
   fs.writeFileSync(path.join(stage, 'watch-accepted.json'), JSON.stringify(acceptedMap));

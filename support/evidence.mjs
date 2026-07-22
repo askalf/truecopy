@@ -8,6 +8,10 @@
 // the detector cannot surface a match the source does not contain. A nonzero total
 // is itself a signal (a detector claim the bytes don't support) and is published.
 
+import { scanTextOf } from '@askalf/redstamp/mcp';
+import { joinScanText, PIECE_JOIN } from '../src/skill.mjs';
+import { locateByOffset } from './offset-map.mjs';
+
 export const EVIDENCE_CAP = 160;
 
 const cap = (s) => (s.length > EVIDENCE_CAP ? s.slice(0, EVIDENCE_CAP - 1) + '…' : s);
@@ -75,14 +79,48 @@ export function locate(match, pieces) {
 
 // items: an array of redstamp findings (each may carry hits:[{flag,match}]).
 // → { evidence: [{flag,text,file,line}], mismatches: <count dropped as unverifiable> }
+// Resolve a finding's hits against the scan target that produced them, so an
+// offset can be interpreted in the coordinate space it belongs to.
+function targetFor(skill, finding) {
+  const targets = (skill && skill.scanTargets) || [];
+  if (targets.length === 1) return targets[0];
+  return targets.find((t) => t && t.name === (finding && finding.tool)) || null;
+}
+
 export function evidenceOf(items, skill) {
   const evidence = [];
   let mismatches = 0;
+  const pieces = (skill && skill.scanPieces) || [];
+  const joined = joinScanText(pieces);
+
   for (const f of (items || [])) {
+    const target = targetFor(skill, f);
+    // Offsets are only meaningful if the text the detector scanned really is
+    // the pieces we are about to cite. If the target was assembled some other
+    // way, fall back rather than map into the wrong coordinate space.
+    const mappable = !!target && typeof target.description === 'string' && target.description === joined;
+    const scanText = mappable ? scanTextOf(target) : null;
+
     for (const h of ((f && f.hits) || [])) {
       if (!h || typeof h.match !== 'string' || !h.match) continue;
-      const loc = locate(h.match, skill && skill.scanPieces);
-      // publish the text as it appears in the FILE (loc.text), never the escaped form
+
+      // Preferred path: locate by OFFSET. This is exact -- it cites the place
+      // the detector actually matched, even when the match spans a quote or a
+      // sliced escape, and it cannot drift onto a coincidental occurrence.
+      if (mappable && typeof h.start === 'number') {
+        const at = locateByOffset(h, { scanText, description: target.description, pieces, join: PIECE_JOIN });
+        if (at) { evidence.push({ flag: h.flag, text: cap(at.text), file: at.file, line: at.line }); continue; }
+        // Offsets were present but did not attribute. Do NOT fall back to a text
+        // search: that is what published citations pointing at unrelated lines
+        // (#100). An honest mismatch beats a confident wrong line.
+        mismatches++;
+        continue;
+      }
+
+      // Compatibility path for a detector that predates offsets: locate the
+      // EXACT match text. Still safe -- the published text provably occurs --
+      // though it cites the first occurrence rather than the match site.
+      const loc = locate(h.match, pieces);
       if (loc) evidence.push({ flag: h.flag, text: cap(loc.text ?? h.match), file: loc.file, line: loc.line });
       else mismatches++;
     }
