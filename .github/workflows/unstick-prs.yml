@@ -31,7 +31,24 @@
 # PR_SWEEP_TOKEN wants exactly two fine-grained permissions on this repo:
 #   Contents: read/write   (the update-branch merge commit)
 #   Pull requests: read/write
-# Without the secret this workflow no-ops loudly rather than half-working.
+# Without the secret this workflow no-ops loudly rather than half-working. An
+# EXPIRED token fails the job loudly instead (gh errors under `set -e`) — the
+# guard below only covers "never configured".
+#
+# DON'T MINT A NEW ONE. The fleet's `GITHUB_PAT_ASKALF` (askalf-fleet-ghm) is
+# already fine-grained across all repos with Contents RW + PR RW and nothing
+# spare — reuse its value. Identity matters more than scope here: this repo sets
+# `require_last_push_approval`, and every update verified on 2026-07-22 (#94,
+# #96, #101) ran as **askalf** while **sprayberry-reviewer** held the approval.
+# The executor's `GITHUB_PAT_EXECUTOR` has the access too (classic `repo`, write
+# collab here) but runs AS sprayberry-reviewer, which would make the approver and
+# the last pusher one identity — untested, and the exact shape that rule exists
+# to catch. Prefer the askalf-identity token.
+#
+# The GitHub Executor cannot do this job today even though its token could: the
+# `gh:` grammar defines no update-branch verb, and its prompt forbids improvising
+# one and forbids pushing commits outright. Moving the sweep there is a platform
+# migration, not a config change.
 #
 # NOTE (verified on #94 and #96, 2026-07-22): an update-branch merge does NOT
 # dismiss the existing approval here, even though the ruleset sets
