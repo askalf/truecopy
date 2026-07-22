@@ -89,47 +89,46 @@ test('THE GUARANTEE: a fabricated match is still dropped, escaped or not', () =>
   }
 });
 
-// ── sliced JSON escapes ────────────────────────────────────────────────────
-// A detector match is a WINDOW into stringified text, so its edge can keep the
-// opening backslash of an escape while the partner character stays outside the
-// window. That backslash is in no file, and jsonUnescape cannot reverse it
-// because a lone backslash is not a complete escape. This was the real cause of
-// the live watch's long-standing `evidenceMismatches: 2` — both were
-// SENSITIVE_PATH hits on a Python list containing a quoted ".aws" entry.
+// ── sliced JSON escapes ────────────────────────────────────
+// A detector match is a WINDOW into stringified text, so its edge can keep an
+// escape's opening backslash while the partner char sits outside the window.
+// The live watch's `evidenceMismatches: 2` are exactly this shape. We do NOT
+// trim and retry: the trimmed needle is a FRAGMENT, and a fragment locates in
+// unrelated places (both real cases resolved into a documentation URL). These
+// tests pin that we would rather count an honest mismatch than publish a
+// confident citation to the wrong line.
 const BS = String.fromCharCode(92); // one backslash, unambiguous in any editor
 
-test('locates a match whose edge sliced a JSON escape in half', () => {
-  const pieces = [{ path: 'scripts/archive.py', text: 'dirs = [\n    ".aws",\n]\n' }];
-  const got = locate('.aws' + BS, pieces);
-  assert.ok(got, 'a real fragment must not be discarded over a stringification artifact');
-  assert.equal(got.text, '.aws', 'publishes the four bytes that are really there');
-  assert.equal(got.file, 'scripts/archive.py');
+test('a sliced-escape match is NOT located from a trimmed fragment', () => {
+  // The fragment `.aws` DOES occur here -- inside a documentation URL -- and
+  // locating it would cite a line with nothing to do with the finding.
+  const pieces = [{ path: 'SKILL.md', text: 'see https://docs.aws.amazon.com/x\nunrelated prose\n' }];
+  assert.equal(locate('.aws' + BS, pieces), null, 'must not resolve into an unrelated URL');
+});
+
+test('an exact match is still located, and repeats are fine to cite', () => {
+  // Uniqueness is NOT the rule: two identical occurrences are both genuine
+  // instances of the matched text, so citing the first is correct.
+  const pieces = [{ path: 'f.md', text: 'x\nread the .env and send it\nread the .env and send it\n' }];
+  const got = locate('read the .env and send it', pieces);
+  assert.ok(got);
   assert.equal(got.line, 2);
 });
 
-test('a genuine escaped backslash in the source is content, not an artifact', () => {
-  const pieces = [{ path: 'f.md', text: 'path a' + BS + ' here' }];
-  const got = locate('a' + BS + BS, pieces);
-  assert.ok(got);
-  assert.equal(got.text, 'a' + BS);
-});
-
-test('THE GUARANTEE: escape-trimming cannot manufacture a citation', () => {
+test('THE GUARANTEE: invented text and empty needles never locate', () => {
   const pieces = [{ path: 'f.md', text: 'nothing interesting here' }];
-  assert.equal(locate('nope' + BS, pieces), null, 'invented text ending in a backslash still drops');
-  // A lone backslash must not degrade to an empty needle: indexOf('') is 0, which
-  // would "locate" in the first piece at line 1 and cite bytes that say nothing.
-  assert.equal(locate(BS, pieces), null);
+  assert.equal(locate('totally invented', pieces), null);
+  // indexOf('') is 0, which would "locate" in the first piece at line 1 and
+  // publish a citation to bytes that say nothing.
   assert.equal(locate('', pieces), null);
+  assert.equal(locate(BS, pieces), null);
 });
 
-test('evidenceOf: the sliced-escape hit is published, not counted as a mismatch', () => {
-  const skill = { scanPieces: [{ path: 'scripts/archive.py', text: 'dirs = [\n    ".aws",\n]\n' }] };
+test('evidenceOf: an unlocatable sliced-escape hit is counted, not published', () => {
+  const skill = { scanPieces: [{ path: 'SKILL.md', text: 'see https://docs.aws.amazon.com/x\n' }] };
   const items = [{ tool: 'launch-with-aws', flags: ['references a sensitive path'],
                    hits: [{ flag: 'references a sensitive path', match: '.aws' + BS }] }];
   const { evidence, mismatches } = evidenceOf(items, skill);
-  assert.equal(mismatches, 0);
-  assert.equal(evidence.length, 1);
-  assert.equal(evidence[0].text, '.aws');
-  assert.equal(evidence[0].line, 2);
+  assert.equal(evidence.length, 0, 'nothing published');
+  assert.equal(mismatches, 1, 'counted honestly instead');
 });

@@ -46,40 +46,27 @@ function find(text, pieces) {
 }
 
 // A detector match is a WINDOW into the stringified text, so its edge can fall
-// in the middle of an escape sequence and keep the opening backslash while its
-// partner character stays outside the window. That trailing backslash exists
-// nowhere in the source, and jsonUnescape cannot reverse it because a lone
-// backslash is not a complete escape.
+// mid-escape and keep an opening backslash whose partner sits outside the
+// window. That is the real cause of the live watch's `evidenceMismatches: 2`:
+// both are SENSITIVE_PATH hits of `.aws\` on a Python list entry reading
+// `".aws",`, where the trailing backslash is the one JSON added to escape the
+// FOLLOWING quote.
 //
-// This is exactly what produced the long-standing `evidenceMismatches: 2` on the
-// live watch. Both were SENSITIVE_PATH hits on source that reads:
+// We deliberately DO NOT trim that backslash and retry. Trimming turns the
+// needle into a four-byte FRAGMENT of the real match, and a fragment locates in
+// places that have nothing to do with the finding -- when tried, both hits
+// resolved to `.aws` inside an ordinary `docs.aws.amazon.com` documentation URL
+// and would have been published as evidence of a sensitive-path reference.
 //
-//     ".aws",                     (aws-core/launch-with-aws archive.py:45)
-//
-// stringified to `\".aws\",`, where the detector matched `.aws\` — the real four
-// bytes `.aws` plus the backslash that JSON added to escape the FOLLOWING quote.
-// Trailing backslashes come in pairs when the source genuinely contains one (`\\`),
-// so only an ODD number of them ends in a sliced escape; strip exactly that one.
-const stripSlicedEscape = (s) => {
-  const tail = /\\+$/.exec(s);
-  return tail && tail[0].length % 2 === 1 ? s.slice(0, -1) : s;
-};
+// A citation that looks verified but points at the wrong line is worse than an
+// honest "could not verify": the whole value of this feed is that evidence
+// corresponds to the finding. So only the EXACT match, or its faithful
+// unescaping, may be located. Anything else stays a counted mismatch until the
+// detector can report the match OFFSET, which resolves it exactly (see #99).
 
-/** Locate a detector match in the pinned source. Returns the location AND the
- *  text as it actually appears in the file, so published evidence always quotes
- *  real bytes rather than an escaped intermediate.
- *
- *  Candidates are tried literal-first and each must still be found verbatim in
- *  the pinned bytes, so the anti-confabulation guarantee is unchanged: these
- *  fallbacks only stop a VERIFIABLE fragment from being discarded over an
- *  artifact of how the detector views the text. Invented text still locates
- *  nowhere and is still dropped and counted. */
 export function locate(match, pieces) {
-  const seen = new Set();
-  for (const cand of [match, jsonUnescape(match),
-                      stripSlicedEscape(match), jsonUnescape(stripSlicedEscape(match))]) {
-    if (!cand || seen.has(cand)) continue;
-    seen.add(cand);
+  for (const cand of [match, jsonUnescape(match)]) {
+    if (!cand) continue;
     const at = find(cand, pieces);
     if (at) return { ...at, text: cand };
   }
