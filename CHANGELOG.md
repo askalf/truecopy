@@ -6,55 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed
-- **Bumped the `@askalf/redstamp` pin** to pick up the case-sensitive
-  `SECRET_ENV_RE` (redstamp#83, closes half of #87). Environment variables are
-  `UPPER_SNAKE` by universal convention; the case-insensitive form read ordinary
-  local variables (`$token`, `$key`, `${apiKey}`) as credentials. Measured over
-  the 2026-07-21 watch (269 plugins / 1848 skills): 102 of 301 recorded
-  `reads a secret env var` hits are lowercase locals that stop matching, while
-  all 199 genuine `UPPER_SNAKE` hits still flag. The narrowed pattern can only
-  ever match *less*, so no skill can newly flag and no acceptance can lapse
-  because of it.
+## [0.10.0] - 2026-07-23
 
 ### Added
-- **Per-flag acceptance granularity for the watch** (#87) — for a vendor whose
-  finding-bearing *file* is the thing that churns, where neither the whole-skill
-  hash nor per-file granularity (#68) helps. An entry
-  (`"granularity": "finding-flags"`) names the files it reviewed and the flags it
-  accepted; those files may then change, and the acceptance holds only while the
-  flags they produce stay inside the reviewed set. Everything outside them must
-  still scan clean, a **new** flag re-flags, a reviewed file that disappears
-  fails closed, and the entry carries a mandatory expiry capped at 90 days.
-  `reviewedHash` records the bytes a human actually read, so the watch reports
-  `drifted` once the vendor edits — a per-flag acceptance stays visible instead
-  of going quiet. Authored by `watch-accept.mjs --flags`, which measures the flag
-  set from the bytes rather than trusting a hand-typed list.
-- **Per-finding evidence — `scan` now reports *what* it matched, and where.**
-  Findings and advisories carry an `evidence` array of
-  `{ flag, text, file, line }`: the exact matched fragment, capped at 160
-  chars, plus the file and 1-based line it occurs on. Surfaced in `--json`.
-  Purely additive — `flags`, `why`, verdicts, and skill hashes are unchanged,
-  so no existing consumer or verdict shifts. (Requires the bumped
-  `@askalf/redstamp` pin, whose sub-detectors now return the matched span
-  alongside each flag.)
-- **Publish-time confabulation self-check in the marketplace watch.** Before
-  publishing, every claimed match is re-located in the pinned source bytes; a
-  fragment that cannot be found is **dropped**, never published, and counted in
-  a new `evidenceMismatches` field in the watch summary. The feed can therefore
-  only ever show a fragment that provably exists at the line it links to — a
-  nonzero count is itself a signal that a detector claimed something the bytes
-  don't support. Evidence file paths are published **repo-relative** (e.g.
-  `skills/<name>/SKILL.md`), so consumers can append them to a plugin's source
-  URL to deep-link the exact line.
-- **`Dockerfile`** — run `truecopy-mcp` as a container. Because the gate needs a
-  downstream server to gate, the image wraps the MCP reference server
-  (`@modelcontextprotocol/server-everything`) and pins its tools at build time
-  (`docker/pin-everything.mjs` captures the live `tools/list` → `truecopy add`),
-  so `tools/list` returns a real, **vetted** set over stdio instead of an empty
-  one. Lets MCP hosts that launch servers from an image (e.g. Glama) build and
-  introspect truecopy. Both package versions are pinned via build args for a
-  reproducible image and lock.
+- **Standalone MCP mode** — run `truecopy-mcp` with no downstream command and it
+  serves two read-only tools of its own, `truecopy-verify` and `truecopy-status`,
+  instead of exiting. The container image now runs standalone by default (no more
+  wrapping `@modelcontextprotocol/server-everything` just to have something to
+  advertise), pre-loaded with the repo's own self-dogfood lock — so an MCP
+  directory that introspects the image now grades truecopy's own tools.
+- **Per-finding evidence** — `scan` results carry an `evidence` array
+  (`{ flag, text, file, line }`) pointing at the exact matched fragment, located
+  by the detector's own match offset rather than a re-search of the text (more
+  reliable: a re-search can land on the wrong occurrence of a short match, or
+  mistake a JSON escape or a name-field hit for the real one). Surfaced in
+  `--json`; purely additive.
+- **Per-flag acceptance granularity for the watch** (#87) — an accept entry can
+  name the specific files and flags a human reviewed, rather than the whole
+  skill; a new flag, or a reviewed file disappearing, still fails closed, and
+  entries carry a mandatory 90-day expiry.
+- **Publish-time confabulation self-check** in the marketplace watch — every
+  published match is re-verified against the pinned source bytes before
+  publishing; anything that can't be located is dropped, never published.
+
+### Changed
+- **Bumped the `@askalf/redstamp` pin** — case-sensitive `SECRET_ENV_RE` (stops
+  flagging ordinary lowercase locals as credentials) and a widened
+  base64-to-shell detector (closes 7 of 12 evasive spellings).
+
+### Security
+- **Docker image hardened** — base image pinned by digest, dependency tree
+  installed from a hash-pinned lockfile, drops root, and moved off a vulnerable
+  `@hono/node-server` transitive (GHSA-frvp-7c67-39w9).
 
 ## [0.9.0] - 2026-07-17
 
