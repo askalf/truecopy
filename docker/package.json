@@ -4,10 +4,7 @@
   "private": true,
   "description": "Dependency set for the truecopy-mcp container image (Dockerfile). Not published; exists so the image installs from a hash-pinned lockfile via `npm ci` instead of an unpinned `npm i <pkg>@<version>`.",
   "license": "MIT",
-  "comments": {
-    "truecopy": "Git+SHA pinned, not the npm registry — the last published version (0.9.0) predates standalone MCP mode (#95), which this image now runs. Same pinning mechanism already used below for redstamp. Swap back to a registry range once a release carrying #95 is published."
-  },
   "dependencies": {
-    "@askalf/truecopy": "github:askalf/truecopy#f374169b86463ae32f862a34dfa1f8dafd9c3063"
+    "@askalf/truecopy": "0.10.0"
   }
 }
