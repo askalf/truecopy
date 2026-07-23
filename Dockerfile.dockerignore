@@ -1,10 +1,11 @@
 # Scoped ignore for the truecopy-mcp image ONLY (BuildKit <Dockerfile>.dockerignore).
 # The image installs truecopy from npm and only needs its dependency manifest +
-# the pin helper — keep the build context tiny and reproducible rather than
-# copying the working tree in.
+# the self-dogfood demo lock it ships pre-loaded with — keep the build context
+# tiny and reproducible rather than copying the working tree in.
 # NOT a root .dockerignore: ClusterFuzzLite (.clusterfuzzlite/Dockerfile) builds
 # from the same repo-root context and needs the full tree (see #76).
 *
 !docker/package.json
 !docker/package-lock.json
-!docker/pin-everything.mjs
+!truecopy.lock
+!demo/clean-mcp.json

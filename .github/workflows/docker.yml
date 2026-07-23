@@ -1,12 +1,12 @@
 # Build the truecopy-mcp image AND RUN IT. A Dockerfile that only ever gets
 # built proves nothing: the failure mode that matters here is a gate that starts
-# fine and serves an EMPTY tools/list (an unpinned or broken lock drops every
-# tool), which a build-only check sails straight past. So this drives a real MCP
-# handshake over stdio against the built image and asserts the pinned tools come
-# back vetted.
+# fine but serves the wrong tools (or none). So this drives a real MCP handshake
+# over stdio against the built image, asserts standalone serves truecopy's own
+# two tools (not a wrapped demo server's), and calls truecopy-verify to confirm
+# the self-dogfood lock it ships with actually verifies clean.
 #
 # Nothing else in CI touches the Dockerfile, and the image is what image-hosting
-# MCP directories build from — so before this, it could rot silently.
+# MCP directories (e.g. Glama) build from — so before this, it could rot silently.
 name: docker
 
 on:
@@ -50,15 +50,14 @@ jobs:
             exit 1
           fi
 
-      - name: The gate serves its pinned tools over stdio
+      - name: Standalone serves truecopy's own tools, and self-verify passes
         run: |
           set -euo pipefail
-          # An unpinned/broken lock makes the gate drop every tool, so an EMPTY
-          # tools/list is the regression to catch — not merely a clean startup.
           out="$(printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
             '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"truecopy-verify","arguments":{}}}' \
             | timeout 120 docker run -i --rm truecopy-mcp:ci 2>/dev/null || true)"
 
           echo "--- server stdout ---"
@@ -70,19 +69,30 @@ jobs:
             const msgs = raw.split("\n").filter(Boolean).map((l) => {
               try { return JSON.parse(l); } catch { return null; }
             }).filter(Boolean);
+
             const list = msgs.find((m) => m && m.id === 2 && m.result && Array.isArray(m.result.tools));
             if (!list) {
               console.error("no tools/list response — the gate did not complete an MCP handshake");
               process.exit(1);
             }
-            const names = list.result.tools.map((t) => t.name);
-            console.log("vetted tools served:", names.length, "->", names.join(", "));
-            if (!names.length) {
-              console.error("tools/list came back EMPTY — the lock is not pinning the downstream server");
+            const names = list.result.tools.map((t) => t.name).sort();
+            console.log("standalone tools served:", names.join(", "));
+            const expected = ["truecopy-status", "truecopy-verify"];
+            if (names.length !== expected.length || !expected.every((n) => names.includes(n))) {
+              console.error("expected exactly the standalone tools " + expected.join(", ") + " — got: " + names.join(", "));
+              console.error("(a wrapped downstream server here means the Dockerfile regressed to gate mode)");
               process.exit(1);
             }
-            if (!names.includes("echo")) {
-              console.error("expected the pinned reference-server tools (echo missing)");
+
+            const verify = msgs.find((m) => m && m.id === 3);
+            if (!verify || !verify.result || verify.result.isError) {
+              console.error("truecopy-verify call failed:", JSON.stringify(verify));
+              process.exit(1);
+            }
+            const report = JSON.parse(verify.result.content[0].text);
+            console.log("truecopy-verify:", JSON.stringify(report));
+            if (!report.ok || report.total < 1) {
+              console.error("self-dogfood lock did not verify clean — expected the shipped demo entry to pass");
               process.exit(1);
             }
           ' <<< "${out}"
