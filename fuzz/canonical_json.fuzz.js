@@ -16,7 +16,22 @@ export function fuzz(data) {
   try { values.push(JSON.parse(s)); } catch {}
   values.push({ [s.slice(0, 32)]: s, ['__proto__']: s, nested: { a: [s, s.length] } });
   const circ = { s }; circ.self = circ; values.push(circ);
+  const circArr = [s]; circArr.push(circArr); values.push(circArr);   // arrays cycle too
   if (s.length) { try { values.push(BigInt(s.length)); } catch {} }
+
+  // DEPTH is the one hostile shape the corpus cannot stumble into — reaching
+  // ~2,000 levels by random mutation effectively never happens, which is why
+  // this target ran green for months while the recursive serializer died there
+  // on a 15 KB tools/list. Derive the depth from the input so every run crosses
+  // the old cliff instead of hoping a mutation finds it.
+  const depth = 1 + (data.length * 37) % 4000;
+  let obj = {}; const objRoot = obj;
+  let arr = []; const arrRoot = arr;
+  for (let i = 0; i < depth; i++) {
+    obj.a = {}; obj = obj.a;
+    const next = []; arr.push(next); arr = next;
+  }
+  values.push(objRoot, arrRoot);
 
   for (const v of values) {
     const j = canonicalJson(v);
