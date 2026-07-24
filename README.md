@@ -175,7 +175,7 @@ Every row above is verified **live**, not just unit-tested: each scenario ran in
 
 ## Publisher signatures — trust *who* signed, not just *that* it changed
 
-A hash catches a change; a signature says **who vetted it**. `truecopy verify` checks every signed entry against your **trust set** — and a cryptographically valid signature from a key you *don't* trust fails closed (`untrusted`), it doesn't quietly pass:
+A hash catches a change; a signature says **who vetted it**. `truecopy verify` checks every signed entry against your **trust set** — and a cryptographically valid signature from a key you *don't* trust fails closed (`untrusted`), it doesn't quietly pass. A signer is matched on the **whole public key**; the short `key id` is a handle for reading and addressing keys, never the thing that decides trust:
 
 ```bash
 # publisher — vet, sign, and publish your key
