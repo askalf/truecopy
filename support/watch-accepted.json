@@ -104,10 +104,10 @@
     "reviewed": "2026-07-17"
   },
   "resend:resend": {
-    "hash": "4cf9339a290395c1d78ba8ae458aea0d639660cb20e61603ca4db8d60ba09c69",
+    "hash": "489ed3f907ecb6de74b8d0c660929aaa1bab412dc459e7883a155179dc860012",
     "class": "paraphrased-exfil near-miss",
-    "note": "webhook signing-secret integration docs",
-    "reviewed": "2026-07-09"
+    "note": "re-reviewed after upstream drift lapsed the 07-09 accept (vendor edited the skill; catalog now pins resend/resend-skills@044372f). Same benign pattern in the current bytes, verified line-by-line: 'data-exfil (paraphrased)' = references/webhooks.md:196, a Resend-dashboard walkthrough ('copy the signing secret... store it as RESEND_WEBHOOK_SECRET') with no exfil destination; 'reads a secret env var' = references/logs.md:56, a curl example authenticating TO Resend's own API via Authorization: Bearer $RESEND_API_KEY, not reading it out to anywhere",
+    "reviewed": "2026-07-24"
   },
   "sagemaker-ai:hyperpod-cluster-debugger": {
     "hash": "48c2be74a8741b1970faa1ad710248cb64dcff0c9e26ba9c0d158bc7e37ded37",
