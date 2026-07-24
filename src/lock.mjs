@@ -57,6 +57,27 @@ export function readLock(p = DEFAULT_LOCK, { mustExist = false } = {}) {
   return { version: 1, ...l, skills: asSkills(l.skills) };
 }
 
+/** Write the lock ATOMICALLY — a temp file in the same directory, then a rename.
+ *
+ *  A plain writeFileSync truncates first, so an interrupted write (crash, full
+ *  disk, Ctrl-C mid-`add --claude` over a few hundred skills) leaves a truncated
+ *  lock. readLock fails CLOSED on that, which is the right call and also means
+ *  the damage is loud: `verify` refuses, and the Skill hook blocks EVERY pinned
+ *  skill until someone restores the file. Rename replaces in one step, so the
+ *  lock on disk is always either the old one or the new one.
+ *
+ *  Concurrency is a separate, unfixed problem: readLock→mutate→writeLock is not
+ *  atomic as a whole, so two `truecopy add` runs racing on the same lock still
+ *  end with one entry lost. That needs real locking; this at least guarantees
+ *  the file is never left half-written. */
 export function writeLock(lock, p = DEFAULT_LOCK) {
-  fs.writeFileSync(p, JSON.stringify(lock, null, 2) + '\n');
+  const body = JSON.stringify(lock, null, 2) + '\n';
+  const tmp = `${p}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, body);
+    fs.renameSync(tmp, p);            // replaces an existing file on POSIX and Windows alike
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch {}   // never leave the temp behind on failure
+    throw e;
+  }
 }

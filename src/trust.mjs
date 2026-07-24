@@ -80,13 +80,36 @@ export function trustKey(publicKey, name, { repo = false, cwd = process.cwd() } 
   return entry;
 }
 
-/** Remove a trusted key by exact id or id-prefix (global store). → count removed. */
-export function untrustKey(idOrPrefix, { cwd = process.cwd() } = {}) {
+const MIN_UNTRUST_PREFIX = 8;
+
+/** Remove a trusted key by exact id or id-prefix (global store). → count removed.
+ *
+ *  Guarded, because the prefix match is greedy and this store is the thing that
+ *  decides whose signatures count. `''.startsWith(x)` is true for every key, so
+ *  `truecopy trust remove ""` silently emptied the entire trust set and cheerfully
+ *  reported "removed 2 key(s)" — every publisher you had vetted, gone, and the
+ *  next `verify --require-signed` failing for reasons that look nothing like the
+ *  cause. A short prefix did the same thing more quietly, to whichever keys
+ *  happened to share it.
+ *
+ *  So: at least 8 characters, and an ambiguous prefix is refused rather than
+ *  applied — unless `all` says that was the intent. Removing the WRONG key is
+ *  not a safe default in either direction, so this errors instead of guessing. */
+export function untrustKey(idOrPrefix, { cwd = process.cwd(), all = false } = {}) {
+  const prefix = String(idOrPrefix ?? '');
+  if (prefix.length < MIN_UNTRUST_PREFIX) {
+    throw new Error(`refusing to match trusted keys on '${prefix}' — give at least ${MIN_UNTRUST_PREFIX} characters of the key id (truecopy trust list)`);
+  }
   const file = homeStore();
   const keys = readStore(file);
-  const kept = keys.filter((k) => !(k.id === idOrPrefix || (k.id || keyId(k.publicKey)).startsWith(idOrPrefix)));
-  if (kept.length !== keys.length) writeStore(file, kept, false);
-  return keys.length - kept.length;
+  const matches = (k) => k.id === prefix || (k.id || keyId(k.publicKey)).startsWith(prefix);
+  const hit = keys.filter(matches);
+  if (hit.length > 1 && !all) {
+    throw new Error(`'${prefix}' matches ${hit.length} trusted keys (${hit.map((k) => k.name || k.id).join(', ')}) — use the full id, or --all to remove them together`);
+  }
+  if (!hit.length) return 0;
+  writeStore(file, keys.filter((k) => !matches(k)), false);
+  return hit.length;
 }
 
 /** The flattened trust set (incl. implicit `self`), for display. */

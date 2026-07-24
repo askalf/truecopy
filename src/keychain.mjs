@@ -36,8 +36,18 @@ export function keychainGet() {
       const blob = blobFile();
       if (!fs.existsSync(blob)) return null;
       const enc = fs.readFileSync(blob, 'utf8').trim();
-      const ps = `Add-Type -AssemblyName System.Security; $b=[Convert]::FromBase64String('${enc}'); $p=[Security.Cryptography.ProtectedData]::Unprotect($b,$null,'CurrentUser'); [Console]::Out.Write([Text.Encoding]::UTF8.GetString($p))`;
-      return run('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps]).trim() || null;
+      // The blob goes in on STDIN, never interpolated into the command string.
+      // It used to be spliced into a single-quoted PowerShell literal, so one
+      // apostrophe in signing-key.dpapi closed the quote and the rest of the file
+      // ran as PowerShell — arbitrary code as this user, on the next `--sign`.
+      // We write that file ourselves as base64, so it takes a separate write to
+      // reach it; but "an attacker who can already write there could do worse"
+      // is a weak defense for a key store, and it stops being true the moment
+      // ~/.canon is a mounted volume, a synced home directory, or a shared CI
+      // box. The set path has always used stdin — this just matches it.
+      if (!/^[A-Za-z0-9+/=\s]+$/.test(enc)) return null;   // not base64: refuse rather than hand it to a shell
+      const ps = 'Add-Type -AssemblyName System.Security; $b=[Convert]::FromBase64String([Console]::In.ReadToEnd().Trim()); $p=[Security.Cryptography.ProtectedData]::Unprotect($b,$null,\'CurrentUser\'); [Console]::Out.Write([Text.Encoding]::UTF8.GetString($p))';
+      return run('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], enc).trim() || null;
     }
   } catch { return null; }
   return null;
