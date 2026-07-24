@@ -136,6 +136,7 @@ Two policies. The default protects the **pinned** set — unpinned skills pass, 
 | pinned clean, **now scans poisoned** — same bytes, newer detection | **blocked** | **blocked** |
 | pinned with `--force` (findings **accepted** for those exact bytes), unchanged | runs | runs |
 | pinned, directory missing · corrupt lock | **blocked** | **blocked** |
+| pinned, but the check itself failed (unreadable file, I/O error) | **blocked** | **blocked** |
 | not pinned · a name truecopy can't resolve to a directory | runs | **blocked** |
 | no lock · hook crash | runs | **blocked** |
 

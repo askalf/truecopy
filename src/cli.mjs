@@ -373,6 +373,7 @@ function runTrust() {
 //   pinned + drifted       BLOCK     BLOCK
 //   pinned + poisoned      BLOCK     BLOCK
 //   pinned, dir missing    BLOCK     BLOCK     (can't verify what will run → fail closed)
+//   pinned, check errored  BLOCK     BLOCK     (same reason — see `unverifiable` below)
 //   not pinned             allow     BLOCK     (adoption-friendly vs lockdown)
 //   no lock / hook error   allow     BLOCK     (a crashed gate must not be a bypass in strict)
 function runHookClaude() {
@@ -409,9 +410,29 @@ function runHookClaude() {
 
     const dir = resolveClaudeSkill(name, { projectDir });
     if (!dir) return deny(`skill '${name}' is pinned but not found under .claude/skills — can't verify what will run`);
-    const skill = loadSkill(dir);
-    if (skillHash(skill) !== entry.hash) return deny(`skill '${name}' DRIFTED since it was pinned — review with: canon diff ${dir.replace(/\\/g, '/')}`);
-    const s = scanSkill(skill);
+
+    // From here the skill IS pinned, so the only question left is whether it
+    // still matches. A failure to answer that is not a reason to run it: an
+    // unreadable file (locked by another process, EACCES, over 2 GiB, EIO, or
+    // removed mid-walk) makes loadSkill throw, and that used to reach the outer
+    // catch — which returns 0 in default mode. Adding one such file to a pinned
+    // skill's directory was therefore enough to make the gate wave it through,
+    // in the mode this gate ships in. The same "can't verify what will run"
+    // reasoning already blocks a missing directory in BOTH modes; leniency below
+    // this line is for skills nobody vetted, not for vetted skills we failed to
+    // check. Attempts stay separate so the drift check keeps short-circuiting
+    // the scan, exactly as before.
+    const unverifiable = (e) => deny(`skill '${name}' is pinned but could NOT be verified — ${e && e.message || e}`);
+    const attempt = (fn) => { try { return { value: fn() }; } catch (e) { return { error: e }; } };
+
+    const loaded = attempt(() => loadSkill(dir));
+    if (loaded.error) return unverifiable(loaded.error);
+    const hashed = attempt(() => skillHash(loaded.value));
+    if (hashed.error) return unverifiable(hashed.error);
+    if (hashed.value !== entry.hash) return deny(`skill '${name}' DRIFTED since it was pinned — review with: canon diff ${dir.replace(/\\/g, '/')}`);
+    const scanned = attempt(() => scanSkill(loaded.value));
+    if (scanned.error) return unverifiable(scanned.error);
+    const s = scanned.value;
     // findings the human accepted with a --force pin (verdict:'flagged' in the
     // lock) don't re-block the same bytes; flagged-but-pinned-clean still does
     if (s.verdict === 'flagged' && entry.verdict !== 'flagged') return deny(`skill '${name}' is POISONED: ${s.findings.map((f) => `${f.tool}: ${f.flags.join('; ')}`).join(' · ')}`);
