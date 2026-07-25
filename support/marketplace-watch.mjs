@@ -167,7 +167,10 @@ if (corpusMode) {
   for (const row of entries) {
     if (row.status !== 'ok' && row.status !== 'ref-fallback') { fetchErrors.push(row); continue; }
     if (row.status === 'ref-fallback') pinDrift.push(row);
-    for (const s of discoverMarketplaceSkills(row.dir, { skipped: linkSkips })) {
+    // Scan from the plugin directory, but let a link reach anywhere inside the
+    // repo that was fetched for it — a git-subdir plugin symlinking to canonical
+    // skills at the repo top is an ordinary monorepo layout, not an escape.
+    for (const s of discoverMarketplaceSkills(row.dir, { skipped: linkSkips, confine: row.repoDir })) {
       // Namespace by the CATALOG name; keep the inner name when a vendor repo
       // nests its own plugin name (or a whole plugins/ tree) under it.
       const inner = s.name.startsWith(`${row.name}:`) ? s.name : `${row.name}/${s.name}`;

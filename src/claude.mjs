@@ -161,11 +161,30 @@ export function discoverClaudePluginSkills() {
  *  points out of the tree is refused and recorded on `opts.skipped` (pass an
  *  array to collect them), never silently dropped: a scanner that quietly
  *  ignores part of what it was pointed at reports a coverage number it did not
- *  earn, and this one publishes that number. */
-export function discoverMarketplaceSkills(root, { skipped = null } = {}) {
+ *  earn, and this one publishes that number.
+ *
+ *  `opts.confine` widens that boundary to an ANCESTOR of `root`. A `git-subdir`
+ *  plugin is one directory inside a larger repo, and the honest layout for a
+ *  vendor with several plugins is to keep canonical skills at the top and
+ *  symlink them in — Redis does exactly that, with eight
+ *  `skills/x -> ../../../skills/x` links. Confined to the plugin directory those
+ *  resolve "outside" and are refused, even though the fetch materialized the
+ *  whole repo and the targets are sitting right there. The watch passes the
+ *  fetched repo root so they are scanned rather than counted as unscannable.
+ *
+ *  The widening is deliberately one-directional: a `confine` that is not an
+ *  ancestor of `root` is IGNORED. A bad value can only narrow the boundary back
+ *  to the scanned directory, never redirect discovery somewhere unrelated. */
+export function discoverMarketplaceSkills(root, { skipped = null, confine = null } = {}) {
   const seen = new Map();
   const resolved = path.resolve(String(root || '.'));
-  let realRoot; try { realRoot = fs.realpathSync(resolved); } catch { realRoot = resolved; }
+  const real = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+  const realRoot = real(resolved);
+  let boundary = realRoot;
+  if (confine) {
+    const c = real(confine);
+    if (realRoot === c || realRoot.startsWith(c + path.sep)) boundary = c;
+  }
   const label = path.basename(resolved);
   for (const kind of ['plugins', 'external_plugins']) {
     const base = path.join(resolved, kind);
@@ -174,14 +193,14 @@ export function discoverMarketplaceSkills(root, { skipped = null } = {}) {
     for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const dir = path.join(base, e.name);
       if (!isDirEntry(e, dir)) continue;
-      if (!insideRoot(dir, realRoot)) {
+      if (!insideRoot(dir, boundary)) {
         skipped?.push({ path: dir, name: `${label}/${e.name}`, reason: 'symlink leaves the scanned tree' });
         continue;
       }
-      collectPluginSkills(dir, label, seen, { confine: realRoot, skipped });
+      collectPluginSkills(dir, label, seen, { confine: boundary, skipped });
     }
   }
-  if (!seen.size) collectPluginSkills(resolved, label, seen, { confine: realRoot, skipped }); // a single-plugin repo
+  if (!seen.size) collectPluginSkills(resolved, label, seen, { confine: boundary, skipped }); // a single-plugin repo
   return [...seen.values()];
 }
 

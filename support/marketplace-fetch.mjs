@@ -172,7 +172,11 @@ async function main() {
       rows.push({ name: e.name, kind: 'external', url: e.url, sha: e.sha, ref: e.ref, status: 'failed', error: `source path missing in repo: ${e.sub}` });
       continue;
     }
-    rows.push({ name: e.name, kind: 'external', url: e.url, sha: e.sha, ref: e.ref, dir, status: r.status, actualSha: r.actualSha, ...(r.error ? { error: r.error } : {}) });
+    // `repoDir` is the whole fetched repo; `dir` is the plugin inside it for a
+    // git-subdir source. The watch needs both: it scans from `dir`, but a
+    // plugin may legitimately symlink to canonical skills kept at the top of
+    // the same repo, and those are only followable if the boundary is the repo.
+    rows.push({ name: e.name, kind: 'external', url: e.url, sha: e.sha, ref: e.ref, dir, repoDir: r.dir, status: r.status, actualSha: r.actualSha, ...(r.error ? { error: r.error } : {}) });
   }
 
   const count = (s) => rows.filter((r) => r.status === s).length;
