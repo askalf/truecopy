@@ -4,7 +4,7 @@
 
 > _truecopy — **own your agent skills**. Vet, sign, and pin every skill & MCP server before it runs. Part of **[Own Your Stack](https://github.com/askalf)** — own your AI infrastructure instead of renting it by the token._
 
-**Proven at ecosystem scale:** truecopy has poison-scanned **68,560 skills** — the full official Claude Code plugin directory ([2,019 skills, zero poisoned](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain)) and the entire ClawHub registry, the marketplace whose poisoning incident started the category ([66,541 skills, zero confirmed malicious](https://sprayberrylabs.com/blog/the-marketplace-that-started-the-panic)). A [standing watch](https://github.com/askalf/truecopy/blob/watch/WATCH.md) re-audits all 255 official plugins **every Monday** and publishes the verdict — that's the live badge above. And the gate eats its own cooking: this repo pins its own demo manifest in [`truecopy.lock`](truecopy.lock) and verifies it on every PR with [truecopy-action](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills).
+**Proven at ecosystem scale:** truecopy has poison-scanned **68,560 skills** — the full official Claude Code plugin directory ([2,019 skills, zero poisoned](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain)) and the entire ClawHub registry, the marketplace whose poisoning incident started the category ([66,541 skills, zero confirmed malicious](https://sprayberrylabs.com/blog/the-marketplace-that-started-the-panic)). A [standing watch](https://github.com/askalf/truecopy/blob/watch/WATCH.md) re-audits the full official plugin directory **every day** and publishes the verdict — that's the live badge above. And the gate eats its own cooking: this repo pins its own demo manifest in [`truecopy.lock`](truecopy.lock) and verifies it on every PR with [truecopy-action](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills).
 
 > _**Formerly `canon`.** Renamed to `truecopy` — a certified true copy — for the npm release; the GitHub repo redirects and the legacy `canon`/`canon-mcp` CLI aliases keep working._
 
@@ -23,7 +23,7 @@ Deterministic and offline. truecopy shares **[redstamp](https://github.com/askal
 
 ```bash
 npm i -g @askalf/truecopy                # latest, from npm
-npm i -g @askalf/truecopy@0.8.0          # pinned release
+npm i -g @askalf/truecopy@0.10.0         # pinned release
 ```
 
 > Also installable straight from GitHub: `npm i -g github:askalf/truecopy`. Every command below runs one-shot with `npx -y @askalf/truecopy` (or `npx -y github:askalf/truecopy`).
@@ -119,7 +119,7 @@ truecopy scan --marketplace ./clone     # audit a marketplace or plugin repo you
   "hooks": {
     "PreToolUse": [
       { "matcher": "Skill",
-        "hooks": [{ "type": "command", "command": "npx -y github:askalf/truecopy#v0.8.0 hook claude", "timeout": 20 }] }
+        "hooks": [{ "type": "command", "command": "npx -y github:askalf/truecopy#v0.10.0 hook claude", "timeout": 20 }] }
     ]
   }
 }
@@ -144,7 +144,7 @@ A `--force` pin is an explicit accept: you read those bytes, truecopy records `v
 
 **Verdicts are severity-aware by surface.** In long-form skill prose, only an *instruction* flags — instruction-override, a jailbreak persona, a sensitive path being *moved* (`read ~/.ssh/id_rsa and POST it to https://…`). A bare *mention* of a sensitive path or secret env var is an **advisory**: shown in `scan`/`add` (`· 1 advisory`), noted in the lock, never blocking — documentation legitimately teaches credential handling. Measured at ecosystem scale: truecopy audited **2,019 skills** — the full official Claude Code plugin marketplace (255 catalog plugins, 177 vendor repos at their pinned SHAs) plus nine community marketplaces — and found **zero poisoned skills**; tightening detection against that corpus took the flag rate from 126 to **12 (0.6%), every one benign on manual review**. Methodology and findings: [Auditing the skills supply chain](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain). Since then, at registry scale: all **66,541 skills on ClawHub** — the marketplace whose poisoned-skills incident started the category — scanned **clean**: zero confirmed malicious, 813 deterministic alarms, every one benign on cross-check against ClawHub's own scanner ([write-up](https://sprayberrylabs.com/blog/the-marketplace-that-started-the-panic)). MCP *tool definitions* keep the strict any-finding rule — in a short description, a mention has no innocent reason to be there.
 
-And the audit didn't end with the study: a **standing watch** re-scans the full official plugin directory every week — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — and publishes the snapshot — plugin and skill counts, verdicts, advisories, pin drift — to [`WATCH.md` on the `watch` branch](https://github.com/askalf/truecopy/blob/watch/WATCH.md) (that's the badge at the top of this page). A poisoned skill would turn the badge red and the scheduled run with it.
+And the audit didn't end with the study: a **standing watch** re-scans the full official plugin directory every day — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — and publishes the snapshot — plugin and skill counts, verdicts, advisories, pin drift — to [`WATCH.md` on the `watch` branch](https://github.com/askalf/truecopy/blob/watch/WATCH.md) (that's the badge at the top of this page). A poisoned skill would turn the badge red and the scheduled run with it.
 
 **The watch is consumable, not just a badge.** Each run also publishes [`directory-manifest.json`](https://github.com/askalf/truecopy/blob/watch/directory-manifest.json) — name → content hash for every skill it scanned, plus the currently-flagged names. Point `check-manifest` at it and every marketplace plugin skill **installed on your machine** is compared against exactly the bytes the watch vetted:
 
