@@ -147,6 +147,13 @@ const corpusMode = fs.existsSync(manifestPath);
 const skills = [];
 const pinDrift = []; // scanned, but at the catalog ref, not the pinned sha
 const fetchErrors = []; // catalog rows the fetch step could not materialize
+// Skill/plugin directories that are symlinks pointing OUT of the fetched tree.
+// Refusing to follow them is deliberate (the alternative is reading and
+// publishing evidence from paths outside the corpus), but they are still things
+// the catalog offered and this run did not scan — so they are counted and named.
+// The published skill total is a claim; anything it excludes has to be visible
+// next to it.
+const linkSkips = [];
 let plugins = 0;
 if (corpusMode) {
   let manifest;
@@ -160,7 +167,7 @@ if (corpusMode) {
   for (const row of entries) {
     if (row.status !== 'ok' && row.status !== 'ref-fallback') { fetchErrors.push(row); continue; }
     if (row.status === 'ref-fallback') pinDrift.push(row);
-    for (const s of discoverMarketplaceSkills(row.dir)) {
+    for (const s of discoverMarketplaceSkills(row.dir, { skipped: linkSkips })) {
       // Namespace by the CATALOG name; keep the inner name when a vendor repo
       // nests its own plugin name (or a whole plugins/ tree) under it.
       const inner = s.name.startsWith(`${row.name}:`) ? s.name : `${row.name}/${s.name}`;
@@ -174,7 +181,7 @@ if (corpusMode) {
     process.exit(2);
   }
 } else {
-  for (const s of discoverMarketplaceSkills(root)) skills.push({ ...s, skillPath: path.relative(root, s.dir).replace(/\\/g, '/') });
+  for (const s of discoverMarketplaceSkills(root, { skipped: linkSkips })) skills.push({ ...s, skillPath: path.relative(root, s.dir).replace(/\\/g, '/') });
   plugins = new Set(skills.map((s) => s.name.split(':')[0])).size;
   if (!skills.length) {
     console.error(`no plugin skills discovered under ${root} — wrong clone, or the marketplace layout changed`);
@@ -223,7 +230,7 @@ for (const s of skills) {
 
 const scannedAt = new Date().toISOString();
 const poisoned = flaggedRows.length;
-const summary = { scannedAt, plugins, skills: skills.length, poisoned, accepted: acceptedRows.length, advisories: advisoryCount, pinDrift: pinDrift.length, fetchErrors: fetchErrors.length, evidenceMismatches };
+const summary = { scannedAt, plugins, skills: skills.length, poisoned, accepted: acceptedRows.length, advisories: advisoryCount, pinDrift: pinDrift.length, fetchErrors: fetchErrors.length, linkSkips: linkSkips.length, evidenceMismatches };
 
 fs.mkdirSync(outDir, { recursive: true });
 const write = (name, data) => fs.writeFileSync(path.join(outDir, name), data);
@@ -231,7 +238,11 @@ const write = (name, data) => fs.writeFileSync(path.join(outDir, name), data);
 write('badge.json', JSON.stringify({
   schemaVersion: 1,
   label: 'marketplace watch',
-  message: `${plugins} plugins · ${skills.length} skills · ${poisoned} poisoned · ${advisoryCount} advisories`,
+  // A refused symlink shows in the badge TEXT when it happens, but does not
+  // change the colour: red/orange mean "something is poisoned or broke", and
+  // declining to follow a link out of the tree is a deliberate, safe refusal.
+  // Silently omitting it from the count is the thing that would be dishonest.
+  message: `${plugins} plugins · ${skills.length} skills · ${poisoned} poisoned · ${advisoryCount} advisories${linkSkips.length ? ` · ${linkSkips.length} unscanned` : ''}`,
   color: poisoned ? 'red' : (fetchErrors.length ? 'orange' : 'brightgreen'),
 }) + '\n');
 
@@ -254,6 +265,7 @@ write('results.json', JSON.stringify({
   advisoryDetail: advisoryRows,
   pinDriftDetail: pinDrift.map((r) => ({ name: r.name, url: r.url, sha: r.sha, ref: r.ref, actualSha: r.actualSha, error: r.error })),
   fetchErrorDetail: fetchErrors.map((r) => ({ name: r.name, url: r.url, status: r.status, error: r.error })),
+  linkSkipDetail: linkSkips.map((r) => ({ name: r.name, reason: r.reason })),
 }, null, 2) + '\n');
 
 const md = [];
@@ -302,6 +314,16 @@ if (fetchErrors.length) {
   md.push('');
   for (const r of fetchErrors) {
     md.push(`- **${r.name}** — ${r.error || r.status}`);
+  }
+  md.push('');
+}
+if (linkSkips.length) {
+  md.push('## ⚠ Not followed');
+  md.push('');
+  md.push('Skill or plugin directories that are **symlinks pointing outside the fetched tree**. truecopy does not follow them — reading and publishing evidence from a path outside the corpus is exactly what a hostile vendor repo would want — so they are counted here rather than folded into the scanned total. A directory that resolves *within* the tree is followed and scanned normally.');
+  md.push('');
+  for (const r of linkSkips) {
+    md.push(`- **${r.name}** — ${r.reason}`);
   }
   md.push('');
 }

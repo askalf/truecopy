@@ -22,8 +22,10 @@ const keyFile = () => path.join(process.env.CANON_HOME || os.homedir(), '.canon'
 
 // PEM bytes can differ only by line endings (CRLF on Windows, a trailing newline
 // from a file read) yet be the same key — normalize before hashing/verifying so a
-// key's identity is stable across platforms.
-const normPem = (p) => String(p).replace(/\r\n/g, '\n').trim();
+// key's identity is stable across platforms. Exported because the trust set keys
+// on it: two normalizations that drift apart would be a security bug, not a
+// cosmetic one.
+export const normPem = (p) => String(p).replace(/\r\n/g, '\n').trim();
 const enc64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const dec64 = (s) => Buffer.from(s, 'base64').toString('utf8');
 
