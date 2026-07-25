@@ -3,12 +3,12 @@
 // pairs with warden's runtime firewall: vet it → contain it.
 import { loadSkill, skillHash, joinScanText, PIECE_JOIN } from './skill.mjs';
 import { scanSkill, detectionInfo } from './scan.mjs';
-import { readLock, writeLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock } from './lock.mjs';
+import { readLock, writeLock, updateLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock } from './lock.mjs';
 import { signHash, verifyHashSig, keyId, ensureKey } from './sign.mjs';
 import { loadTrust, trustedSigner, trustKey, untrustKey, listTrust } from './trust.mjs';
 import { sha256, canonicalJson } from './hash.mjs';
 
-export { loadSkill, skillHash, joinScanText, PIECE_JOIN, scanSkill, detectionInfo, readLock, writeLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock };
+export { loadSkill, skillHash, joinScanText, PIECE_JOIN, scanSkill, detectionInfo, readLock, writeLock, updateLock, DEFAULT_LOCK, LEGACY_LOCK, resolveLock };
 export { signHash, verifyHashSig, keyId, ensureKey };
 export { loadTrust, trustedSigner, trustKey, untrustKey, listTrust };
 export { claudeSkillRoots, discoverClaudeSkills, discoverClaudePluginSkills, discoverMarketplaceSkills, resolveClaudeSkill } from './claude.mjs';
@@ -41,8 +41,10 @@ export function pin(source, { lockPath = resolveLock(), sign = false, force = fa
   if (s.verdict === 'flagged' && !force) return { ok: false, reason: 'flagged', findings: s.findings, skill };
   const hash = skillHash(skill);
   const key = name || skill.name;
-  const lock = readLock(lockPath);
-  lock.skills[key] = {
+  // Everything expensive — loading, scanning, hashing, signing — is done above,
+  // OUTSIDE the guard. Only the read-modify-write is serialized, so a concurrent
+  // pin queues for milliseconds rather than behind someone else's poison scan.
+  const entry = {
     source: skill.source, kind: skill.kind, hash,
     scannedAt: new Date().toISOString(), verdict: s.verdict, findings: s.findings.length,
     ...(s.advisories?.length ? { advisories: s.advisories.length } : {}), // mentions noted at pin time, for the record
@@ -50,7 +52,7 @@ export function pin(source, { lockPath = resolveLock(), sign = false, force = fa
     parts: partsOf(skill),
     ...(sign ? { sig: signHash(hash), signed: true } : {}),
   };
-  writeLock(lock, lockPath);
+  updateLock(lockPath, (lock) => { lock.skills[key] = entry; });
   return { ok: true, name: key, hash, verdict: s.verdict, signed: sign, skill, advisories: s.advisories?.length || 0 };
 }
 
@@ -59,11 +61,11 @@ export function pin(source, { lockPath = resolveLock(), sign = false, force = fa
  *  manual editing canon exists to discourage. A no-op removal never writes (so it
  *  can't create an empty lock), and a corrupt lock still fails CLOSED via readLock. */
 export function unpin(name, { lockPath = resolveLock() } = {}) {
-  const lock = readLock(lockPath);
-  if (!(name in lock.skills)) return 0;
-  delete lock.skills[name];
-  writeLock(lock, lockPath);
-  return 1;
+  return updateLock(lockPath, (lock, ctx) => {
+    if (!(name in lock.skills)) { ctx.skip(); return 0; }
+    delete lock.skills[name];
+    return 1;
+  });
 }
 
 /** Re-derive every pinned skill and classify it against the lock.

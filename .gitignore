@@ -6,3 +6,7 @@ canon.lock
 
 # commit-message scratch
 *.tmp
+
+# transient lock guard / temp files
+*.lock.guard
+*.lock.tmp-*

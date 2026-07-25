@@ -95,7 +95,7 @@ function usage() {
   truecopy key                         print this machine's public key + id (share it to be trusted)
   truecopy trust add <pubkey> --name <who> [--repo]   trust a publisher's key (--repo → commit it to truecopy.trust)
   truecopy trust list                  show the trusted signing keys
-  truecopy trust remove <id>           stop trusting a key
+  truecopy trust remove <id> [--all]   stop trusting a key (≥8 chars of the id; --all if it matches several)
 
   truecopy hook claude [--strict]      Claude Code PreToolUse hook: block a pinned skill that
                                     drifted or turned poisonous at the moment it's invoked
@@ -353,8 +353,12 @@ function runTrust() {
     } catch (e) { out(`${c(C.red, '✗')} ${e.message}`); return 1; }
   }
   if (action === 'remove' || action === 'rm') {
-    if (!sources[1]) { out('usage: canon trust remove <keyId>'); return 2; }
-    const n = untrustKey(sources[1]);
+    if (!sources[1]) { out('usage: canon trust remove <keyId> [--all]'); return 2; }
+    let n;
+    // A too-short or ambiguous prefix is refused, not guessed at — removing the
+    // wrong trusted key is as bad as keeping one you meant to drop.
+    try { n = untrustKey(sources[1], { all: !!opt('--all', false) }); }
+    catch (e) { out(`${c(C.red, '✗')} ${e.message}`); return 2; }
     out(n ? `${mark.ok} removed ${n} key(s)` : c(C.dim, 'no matching key'));
     return 0;
   }

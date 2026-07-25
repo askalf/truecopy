@@ -20,12 +20,30 @@ const batchError = (msg) => {
   return { reply: JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32600, message: '⛔ canon: JSON-RPC batching is not supported through the gate — send individual requests' } }) };
 };
 
+// A line neither side can agree on is not forwarded. Everything else in this
+// gate fails closed; passing on bytes we could not inspect was the one exception,
+// and it undoes the guarantee exactly when it matters — the gate's promise is
+// that nothing reaches the agent it has not looked at, and "our parser choked"
+// is not a reason to believe a message is harmless. Any disagreement between
+// this parser and the peer's is a hole the size of one tools/list.
+//
+// Nothing legitimate is lost: MCP frames one JSON value per line, so a line
+// V8's JSON.parse rejects is not valid JSON, and a peer could not have acted on
+// it either. The client gets a JSON-RPC parse error (id null, per spec, since
+// the id is exactly what we failed to read); a server line is dropped with a
+// warning rather than handed on as garbage the client would only fail to parse
+// itself.
+const parseError = (detail) => ({
+  reply: JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: `⛔ truecopy: ${detail}` } }),
+});
+
 /** client → server. { forward } to pass on, or { reply } to short-circuit a blocked call. */
 export function inspectClient(line, state) {
+  if (!String(line).trim()) return {};                 // nothing to do; not an error
   let msg;
-  try { msg = JSON.parse(line); } catch { return { forward: line }; }
+  try { msg = JSON.parse(line); }
+  catch { return parseError('that request is not parseable JSON — the gate does not forward what it cannot inspect'); }
   if (Array.isArray(msg)) return batchError(msg); // a batch could smuggle a blocked tools/call — fail closed
-  if (msg && msg.method && msg.id != null) state.pending[msg.id] = msg.method;
   // Fail CLOSED on calls: a tool is callable only once we've SEEN and vetted a
   // tools/list AND its name survived that gating. Before any gated list (`listed`
   // is false), block everything — a tool known to the agent out-of-band, or
@@ -43,8 +61,7 @@ export function inspectClient(line, state) {
 // element instead of forwarding the array raw.
 function gateServerMsg(msg, state, opts) {
   const isToolsResult = msg && msg.result && Array.isArray(msg.result.tools);
-  if (!isToolsResult) { if (msg && msg.id != null) delete state.pending[msg.id]; return msg; }
-  if (msg.id != null) delete state.pending[msg.id];
+  if (!isToolsResult) return msg;
   const { allowed, report } = gateTools(msg.result.tools, opts.entry);
   const blockAll = opts.strict && report.some((r) => r.status !== 'vetted'); // strict: any problem → block the whole server
   for (const r of report) if (r.status !== 'vetted') { state.blocked.add(r.tool); opts.onWarn?.(`${blockAll ? 'strict — blocking all (' : 'dropped '}${r.tool} (${r.status})${blockAll ? ')' : ''}`); }
@@ -65,8 +82,15 @@ function gateServerMsg(msg, state, opts) {
  *  is cleared), bury tools in another reply, or hide a tools/list inside a
  *  JSON-RPC BATCH array; all must be gated, never forwarded raw. */
 export function inspectServer(line, state, opts = {}) {
+  if (!String(line).trim()) return {};
   let msg;
-  try { msg = JSON.parse(line); } catch { return { forward: line }; }
+  try { msg = JSON.parse(line); }
+  catch {
+    // Dropped, not relayed: the client could not have parsed it either, and
+    // forwarding un-inspected bytes is the one way past this gate.
+    opts.onWarn?.('dropped an unparseable line from the server (not forwarded)');
+    return { drop: true };
+  }
   if (Array.isArray(msg)) return { forward: JSON.stringify(msg.map((m) => gateServerMsg(m, state, opts))) };
   return { forward: JSON.stringify(gateServerMsg(msg, state, opts)) };
 }
@@ -84,7 +108,7 @@ export function runGate({ command, args = [], lockPath = resolveLock(), name = n
   const entry = pickEntry(readLock(lockPath), name);
   if (!entry) warn(`no pinned ${name ? '"' + name + '" ' : ''}MCP entry in ${lockPath} — every tool will be treated as unvetted (canon add it first)`);
   const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'inherit'] });
-  const state = { pending: {}, blocked: new Set(), allowedNames: new Set(), listed: false };
+  const state = { blocked: new Set(), allowedNames: new Set(), listed: false };
   const opts = { entry, strict, onWarn: warn };
 
   readline.createInterface({ input: process.stdin }).on('line', (line) => {
@@ -95,7 +119,8 @@ export function runGate({ command, args = [], lockPath = resolveLock(), name = n
   });
   readline.createInterface({ input: child.stdout }).on('line', (line) => {
     if (!line.trim()) return;
-    process.stdout.write(inspectServer(line, state, opts).forward + '\n');
+    const r = inspectServer(line, state, opts);
+    if (r.forward) process.stdout.write(r.forward + '\n');   // a dropped line writes nothing
   });
   process.stdin.on('end', () => { try { child.stdin.end(); } catch {} });
   child.on('exit', (code) => process.exit(code ?? 0));
