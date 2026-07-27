@@ -1,6 +1,10 @@
 # truecopy
 
-[![npm](https://img.shields.io/npm/v/%40askalf%2Ftruecopy?label=npm)](https://www.npmjs.com/package/@askalf/truecopy) [![GitHub Marketplace](https://img.shields.io/badge/marketplace-truecopy--action-6f42c1?logo=github)](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills) [![marketplace watch](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json)](https://github.com/askalf/truecopy/blob/watch/WATCH.md) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge)](https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy)
+[![npm](https://img.shields.io/npm/v/%40askalf%2Ftruecopy?label=npm)](https://www.npmjs.com/package/@askalf/truecopy) [![GitHub Marketplace](https://img.shields.io/badge/marketplace-truecopy--action-6f42c1?logo=github)](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills) [![marketplace watch](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json)](https://github.com/askalf/truecopy/blob/watch/WATCH.md) [![CI](https://github.com/askalf/truecopy/actions/workflows/ci.yml/badge.svg)](https://github.com/askalf/truecopy/actions/workflows/ci.yml) [![CodeQL](https://github.com/askalf/truecopy/actions/workflows/codeql.yml/badge.svg)](https://github.com/askalf/truecopy/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge)](https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy) [![license](https://img.shields.io/npm/l/%40askalf%2Ftruecopy?label=license&color=6f42c1)](https://github.com/askalf/truecopy/blob/master/LICENSE) [![downloads](https://img.shields.io/npm/dm/%40askalf%2Ftruecopy?label=downloads&color=6f42c1)](https://www.npmjs.com/package/@askalf/truecopy)
+
+<!-- OpenSSF Best Practices — uncomment once enrolled at https://www.bestpractices.dev and replace PROJECT_ID:
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/PROJECT_ID/badge)](https://www.bestpractices.dev/projects/PROJECT_ID)
+-->
 
 > _truecopy — **own your agent skills**. Vet, sign, and pin every skill & MCP server before it runs. Part of **[Own Your Stack](https://github.com/askalf)** — own your AI infrastructure instead of renting it by the token._
 
@@ -245,6 +249,8 @@ verify();                                 // { ok, results: [{ name, status: 'ok
 ## The agent-security stack
 
 Three composable layers, one defense: **[redstamp](https://github.com/askalf/redstamp)** contains the call · **[truecopy](https://github.com/askalf/truecopy)** vets the tool *(you are here)* · **[strongroom](https://github.com/askalf/strongroom)** holds the keys. Run all three together → **[agent-security-stack](https://github.com/askalf/agent-security-stack)**.
+
+Related: **[plumbline](https://github.com/askalf/plumbline)** — own your agent *trajectory*: out-of-band, read-only monitoring of the whole action sequence against the declared job. A monitor **above** these three in-path layers — it scores what an agent did end to end, catching an escape assembled from individually-authorized steps. It never blocks an action.
 
 ---
 Part of **[Own Your Stack](https://github.com/askalf)** — own your AI infrastructure instead of renting it. Built by Thomas Sprayberry.
