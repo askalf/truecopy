@@ -26,14 +26,19 @@ function scanPieces(pieces) {
 //
 // No refinement of text search fixes this: indexOf cannot reproduce a regex's
 // boundaries, lookarounds or clause context. Only the offset can.
+// The fixture is a COMPOUND-WORD block rather than the original "leakage": the
+// detector now requires exfil evidence in the clause (a bare `leak` no longer
+// fires at all), so the match is a phrase. `credentialsStore` is the same defect
+// in current form — the regex cannot match its object there (`(?![\w-])` sees the
+// `S`), but indexOf finds the phrase inside it and cites the wrong file.
 test('resolves to the MATCH SITE, not an earlier substring the regex never matched', () => {
   const pieces = [
-    { path: 'controls.md', text: 'A security control that caps credential leakage and the replay window.\n' },
-    { path: 'risks.md', text: 'Sensitive data can leak to users when chunks are unsanitized.\n' },
+    { path: 'controls.md', text: 'The helper must never leak the credentialsStore handle to logs.\n' },
+    { path: 'risks.md', text: 'A misconfigured sink can leak the credentials to a third party.\n' },
   ];
   const { hits, ctx } = scanPieces(pieces);
-  const hit = hits.find((h) => h.match === 'leak');
-  assert.ok(hit, `expected a bare "leak" match; got ${hits.map((h) => JSON.stringify(h.match)).join(', ')}`);
+  const hit = hits.find((h) => h.match === 'leak the credentials');
+  assert.ok(hit, `expected a "leak the credentials" match; got ${hits.map((h) => JSON.stringify(h.match)).join(', ')}`);
 
   const byOffset = locateByOffset(hit, ctx);
   assert.ok(byOffset, 'the offset must attribute');
@@ -46,25 +51,36 @@ test('resolves to the MATCH SITE, not an earlier substring the regex never match
   assert.notEqual(byText.file, byOffset.file, 'the two disagree -- that disagreement is the bug');
 });
 
-// ── escape-spanning matches ──────────────────────────────────────────────────
-test('resolves a match whose window slices a JSON escape', () => {
-  // A quoted path token: the scanned form carries the backslash JSON added to
-  // escape the following quote, so the matched text exists in no file and is
-  // unfindable by search. The offset still places it exactly.
-  const pieces = [{ path: 'scripts/archive.py', text: 'dirs = [\n    ".aws",\n]\n' }];
+// ── escape artifacts ─────────────────────────────────────────────────────────
+// This test used to prove the offset could place a match whose window SLICED a
+// JSON escape: `".aws",` matched `.aws\"`, carrying the backslash JSON added to
+// escape the quote, so the matched text existed in no file. The detector now
+// refuses that shape outright (`\.aws(?:\/|\\(?!"))` — the lookahead rejects a
+// backslash that is really a JSON escape), so the artifact is gone AT THE ROOT
+// rather than compensated for downstream, and the old fixture yields no hit.
+//
+// What is still worth guarding is the invariant that survived it: whatever the
+// detector matches, the published citation must be real source bytes. So: a
+// bare quoted `.aws` must not fabricate a hit, and every hit a real path DOES
+// produce must be locatable and verbatim.
+test('a JSON escape never reaches the published citation', () => {
+  const artifact = [{ path: 'scripts/archive.py', text: 'dirs = [\n    ".aws",\n]\n' }];
+  const bare = scanPieces(artifact);
+  assert.equal(bare.hits.filter((h) => h.match.includes('\\')).length, 0,
+    `no match may carry a JSON escape; got ${bare.hits.map((h) => JSON.stringify(h.match)).join(', ')}`);
+
+  // A real path (with its separator) still flags — so this is not vacuous.
+  const pieces = [{ path: 'scripts/archive.py', text: 'dirs = [\n    ".aws/",\n    ".env",\n]\n' }];
   const { hits, ctx } = scanPieces(pieces);
-  const hit = hits.find((h) => h.match.includes('.aws'));
-  assert.ok(hit, 'fixture must produce a sensitive-path hit');
-
-  const at = locateByOffset(hit, ctx);
-  assert.ok(at, 'offset must attribute even though the text is unsearchable');
-  assert.equal(at.file, 'scripts/archive.py');
-  assert.equal(at.line, 2);
-  // the published text is real source bytes, not the escaped intermediate
-  assert.ok(pieces[0].text.includes(at.text), 'cited text must occur verbatim in the source');
-  assert.ok(!at.text.includes('\\"'), 'must not publish the escaped form');
-
-  assert.equal(locate(hit.match, pieces), null, 'text search cannot find it -- that is the gap');
+  // one hit per FLAG, so two sensitive paths in one piece still record once.
+  assert.ok(hits.length >= 1, `fixture must produce a sensitive-path hit; got ${hits.length}`);
+  for (const hit of hits) {
+    const at = locateByOffset(hit, ctx);
+    assert.ok(at, `offset must attribute ${JSON.stringify(hit.match)}`);
+    assert.equal(at.file, 'scripts/archive.py');
+    assert.ok(pieces[0].text.includes(at.text), 'cited text must occur verbatim in the source');
+    assert.ok(!at.text.includes('\\"'), 'must not publish the escaped form');
+  }
 });
 
 // ── fail-safes: refusing beats guessing ──────────────────────────────────────
