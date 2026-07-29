@@ -131,8 +131,45 @@ test('a hit inside the description is NOT excused as outside', () => {
   assert.ok(locateByOffset(hit, ctx), 'and it locates normally');
 });
 
+// Surrogate cases for the serializer cross-check. The list already covered a
+// real control char (U+0001) but had NO surrogate at all, and a lone surrogate is
+// the one input where our escaping diverged from JSON.stringify: well-formed
+// stringify (ES2019) emits \udXXX for an unpaired surrogate, we emitted it raw,
+// so scannedDescription refused an entire real skill's description and every hit
+// in it published with no evidence (truecopy#125). Built with fromCharCode so
+// each entry is unambiguously the thing it claims to be.
+const CH = (...c) => String.fromCharCode(...c);
+const ESCAPE_EDGE_CASES = [
+  'top of ctrl range ' + CH(0x1f) + ' here',   // complements the U+0001 case below
+  'lone high ' + CH(0xd800) + ' here',         // unpaired high  -> \ud800
+  'lone low ' + CH(0xdc00) + ' here',          // unpaired low   -> \udc00
+  'high then plain ' + CH(0xd83d) + 'A here',  // high NOT followed by a low
+  'wrong order ' + CH(0xdc00, 0xd800),         // adjacent, but low before high
+  'valid pair ' + CH(0xd83d, 0xde00) + ' ok',  // a real pair must stay RAW
+  'pair then lone ' + CH(0xd83d, 0xde00, 0xd800), // both forms adjacent
+];
+
+// The unit-level form of the wix:wix-headless failure: the hit that matters sits
+// in a normal file, and one binary blob elsewhere in the skill must not silence
+// it. Before the fix this returned null and counted as a mismatch.
+test('a lone surrogate in another piece does not break attribution', () => {
+  const pieces = [
+    { path: '.DS_Store', text: 'Bud1 ' + CH(0xd800) + ' binary junk ' },
+    { path: 'SKILL.md', text: 'Store the token in .env before running.\n' },
+  ];
+  const { hits, ctx } = scanPieces(pieces);
+  const hit = hits.find((h) => h.match.includes('.env'));
+  assert.ok(hit, `fixture must produce a sensitive-path hit; got ${hits.map((h) => JSON.stringify(h.match)).join(', ')}`);
+
+  const at = locateByOffset(hit, ctx);
+  assert.ok(at, 'a lone surrogate in another piece must not prevent attribution');
+  assert.equal(at.file, 'SKILL.md', 'must cite the file the detector actually matched');
+  assert.equal(at.line, 1);
+  assert.ok(pieces[1].text.includes(at.text), 'cited text must occur verbatim in the source');
+});
+
 test('scannedDescription agrees with the real serializer, or refuses', () => {
-  for (const s of ['plain', 'has "quotes"', 'back\\slash', 'tab\there', 'nl\nhere', 'ctrlchar', 'unicode ☠ ok']) {
+  for (const s of [...ESCAPE_EDGE_CASES, 'plain', 'has "quotes"', 'back\\slash', 'tab\there', 'nl\nhere', 'ctrlchar', 'unicode ☠ ok']) {
     const got = scannedDescription(s);
     assert.ok(got, `must map: ${JSON.stringify(s)}`);
     assert.equal(got.map.length, got.text.length, 'index map must stay in step with the text');

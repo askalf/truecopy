@@ -18,8 +18,13 @@
 // backslash followed by a real newline). So we build it FORWARDS instead,
 // recording which source index produced each emitted character.
 
-// JSON.stringify's string escapes. Anything else below U+0020 becomes \uXXXX.
+// JSON.stringify's string escapes. Anything else below U+0020 becomes \uXXXX,
+// as does a LONE surrogate (see escapeWithMap).
 const ESCAPES = { '"': '\\"', '\\': '\\\\', '\b': '\\b', '\f': '\\f', '\n': '\\n', '\r': '\\r', '\t': '\\t' };
+
+const isHighSurrogate = (c) => c >= 0xd800 && c <= 0xdbff;
+const isLowSurrogate = (c) => c >= 0xdc00 && c <= 0xdfff;
+const uEscape = (code) => '\\u' + code.toString(16).padStart(4, '0');
 
 /** Escape `src` as JSON would, recording the source index behind each output char. */
 function escapeWithMap(src) {
@@ -30,7 +35,24 @@ function escapeWithMap(src) {
     let piece = ESCAPES[ch];
     if (piece === undefined) {
       const code = ch.charCodeAt(0);
-      piece = code < 0x20 ? '\\u' + code.toString(16).padStart(4, '0') : ch;
+      if (code < 0x20) piece = uEscape(code);
+      // Well-formed JSON.stringify (ES2019) escapes a LONE surrogate as \udXXX
+      // and leaves a valid pair alone. Emitting a lone one raw made our text
+      // disagree with the serializer, so scannedDescription refused the WHOLE
+      // description and every hit in that skill published with no evidence —
+      // the mismatch counter rose but pointed at no cause.
+      //
+      // Not an exotic input: a NUL-heavy file (a macOS .DS_Store) trips
+      // decodeForScan's UTF-16 heuristic, and decoding arbitrary bytes as UTF-16
+      // strews unpaired surrogates through the text. `wix:wix-headless` carried
+      // exactly two, both inside its .DS_Store, and they cost the whole skill its
+      // evidence (truecopy#125).
+      //
+      // A valid pair needs no special case: emitting each half raw reproduces it,
+      // and each half keeps its own source index in the map.
+      else if (isHighSurrogate(code)) piece = isLowSurrogate(src.charCodeAt(i + 1)) ? ch : uEscape(code);
+      else if (isLowSurrogate(code)) piece = isHighSurrogate(src.charCodeAt(i - 1)) ? ch : uEscape(code);
+      else piece = ch;
     }
     for (let k = 0; k < piece.length; k++) map.push(i);
     out += piece;
