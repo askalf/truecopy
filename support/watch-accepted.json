@@ -53,11 +53,11 @@
   "aws-core:launch-with-aws": {
     "granularity": "finding-files",
     "files": {
-      "scripts/launch_config.py": "207265c7b9580f45ef92b6dd0835a101d8d354a574eb97721b0b9f3f41de357c"
+      "scripts/launch_config.py": "840e8262379f816847a90cadd2d20ddf71d94781f98db34b16cf5ae1c053627c"
     },
     "class": "defensive quoting",
-    "note": "AWS's own OIDC config hardening: 'Refusing to send credentials over a non-HTTPS connection' refusal strings + its ~/.launch-with-aws session path constant — the module validates endpoints against exfil, it doesn't perform it",
-    "reviewed": "2026-07-17"
+    "note": "AWS's own OIDC config hardening — the module validates endpoints AGAINST exfil, it does not perform it. Re-read end to end at catalog pin 4f3fc9a after the plugin re-pinned (b4416dd → 4f3fc9a) and lapsed the 2026-07-17 per-file hash; the finding is unchanged in kind, only the bytes moved. scripts/launch_config.py is a security-control module: _validate_base_url rejects non-HTTPS, enforces an AWS domain allowlist (.api.aws/.amazonaws.com), and rejects hosts resolving to private/loopback/link-local addresses (SSRF protection); validate_issuer_url enforces an IdC issuer allowlist. It carries THREE refusal strings, and the flagged 'data-exfil instruction' text is inside one of them: 'Refusing to send credentials over a non-HTTPS connection' (line 107). Flagging it is the inverse of what the code does. The co-occurring '.env' advisory is scripts/archive.py's _SKIP_FILES frozenset — a list of files EXCLUDED from archives (.env, .env.local, credentials, credentials.json, .git-credentials), i.e. the control that stops secrets being packaged. archive.py is not in the reviewed set because it carries no finding, only an advisory, and the helper verified the remainder scans clean.",
+    "reviewed": "2026-07-31"
   },
   "aws-data-analytics:finding-data-lake-assets": {
     "hash": "fc9a76c35cbd1846bbf26b4d19758151e21c06c356a0008cd172db38058aba0a",
