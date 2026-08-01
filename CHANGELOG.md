@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-08-01
+
+### Fixed
+- **The redstamp dependency is a signed release tarball, not a git pin.** It was
+  `github:askalf/redstamp#<sha>`, which npm resolves over `ssh://git@github.com`.
+  npm v12 [blocks git dependencies by default](https://github.blog/changelog/2026-06-09-upcoming-breaking-changes-for-npm-v12/),
+  so once runners ship npm 12 **every** install route — registry, release
+  tarball, git — would fail one level down, regardless of how truecopy itself
+  was fetched. Now pinned to
+  `https://github.com/askalf/redstamp/releases/download/v0.7.3/askalf-redstamp-0.7.3.tgz`.
+
+  Two things this buys beyond npm 12 compatibility:
+
+  - **The lockfile now carries an `integrity` hash.** A git dependency has none —
+    that is what npm's `skipping integrity check for git dependency` warning
+    meant. A supply-chain gate installing its own scanner without an integrity
+    check was the wrong shape.
+  - **No `ssh://` in the dependency graph**, so it resolves on runners with no
+    SSH key.
+
+  Not a downgrade: redstamp v0.7.3 is 2 commits *ahead* of the SHA that was
+  pinned (0 behind), and contains the five classifier fixes (#107–#111) that the
+  SHA pin existed to reach in the first place.
+
 ## [0.10.0] - 2026-07-23
 
 ### Added
