@@ -77,6 +77,18 @@
     "note": "quotes 'ignore previous instructions' to teach resisting it",
     "reviewed": "2026-07-09"
   },
+  "datarobot-agent-skills:datarobot-agent-assist": {
+    "granularity": "finding-files",
+    "files": {
+      "agent-assist-simulate/prompts/generate-attack.md": "cb87ed0a7cfba8f74eb78273286b6208c06d4041db5988c342003cb78b8ba645",
+      "agent-assist-simulate/prompts/generate-behavior.md": "849d4ecef5b58128ae8abc4f96361ed2068b3b415f5e68691d99984f38fababb",
+      "agent-assist-simulate/prompts/generate-tool-return.md": "975f34d93b0bebff3180fc5fe981b7795403bdb9dbcc4d366c68b556c4734170",
+      "agent-assist-simulate/prompts/industry.md": "df704dcbf50a8c17a952619c8d1db4c0fbd4282debcd7e4ce3599240d7e0023b"
+    },
+    "class": "security-testing fixtures",
+    "note": "The skill's `agent-assist-simulate` sub-skill IS an agent red-teaming harness, so shipping attack strings is the product. All four finding-bearing files read end to end at catalog pin 519c35e. Each opens by declaring itself: generate-attack.md and generate-behavior.md both begin 'This is a controlled agent simulation task for stress-testing an AI agent under test conditions', and generate-tool-return.md is more explicit still — 'a controlled, defensive red-team evaluation run by the developers of the agent under test to harden it before deployment. You are generating synthetic test data, not real data, and not performing any request yourself.' The flagged strings are bullet entries inside labelled pattern libraries (A1-A7 attack, B1-B5 behaviour, F1-F4 adversarial tool-return fixtures), and every generator's output schema carries `expected_safe_behavior` and `breach_indicators` — the scenarios it emits are ones where the CORRECT result is the agent refusing. industry.md is an 'Agent Failure Pattern Library', an industry-sourced taxonomy citing OWASP LLM Top 10 (2025), the InjecAgent benchmark, Microsoft's Agentic Failure Modes Taxonomy v2.0 and JailbreakBench; its flagged lines are catalogue entries from those published sources. Whole-skill checks: the only non-vendor URLs are a LOCAL health endpoint (127.0.0.1:4096) plus git-scm.com and python.org doc links, so there is no external sink; credentials are `os.getenv('DATAROBOT_API_TOKEN')`/`DATAROBOT_ENDPOINT` used to reach DataRobot's own API; the single base64 use is `base64.urlsafe_b64encode(random_bytes)` generating a random token, not decoding a payload; and the '.env' advisory at SKILL.md:82 is a section on `.env` PLACEMENT in the user's own project workspace. Nothing addresses the agent reading the skill.",
+    "reviewed": "2026-08-01"
+  },
   "mercadopago:mp-integrate": {
     "hash": "fd9fc44d2e1d2f69796a4f70d1602e6fdc656d52e22c3f9143522e71df000626",
     "class": "capability documentation",
