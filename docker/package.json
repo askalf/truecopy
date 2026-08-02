@@ -5,6 +5,6 @@
   "description": "Dependency set for the truecopy-mcp container image (Dockerfile). Not published; exists so the image installs from a hash-pinned lockfile via `npm ci` instead of an unpinned `npm i <pkg>@<version>`.",
   "license": "MIT",
   "dependencies": {
-    "@askalf/truecopy": "0.10.0"
+    "@askalf/truecopy": "0.10.2"
   }
 }

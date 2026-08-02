@@ -20,25 +20,22 @@
 # get bumped deliberately instead of drifting silently.
 FROM node:26-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583
 
-# @askalf/truecopy pulls @askalf/redstamp from GitHub, so git (+ CA certs for
-# HTTPS) must be present when npm resolves the dependency tree.
+# CA certs for HTTPS while npm resolves the tree. git is deliberately NOT
+# installed: as of truecopy 0.10.1 the redstamp dependency is a signed release
+# tarball fetched over HTTPS, not a git pin, so there is no git-sourced package
+# left in docker/package-lock.json (grep it for `git+` — zero hits) and nothing
+# in this build shells out to git. A container whose whole job is gating a
+# supply chain should not carry a fetch tool it never uses.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
+ && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
-
-# npm writes hosted-git `resolved` URLs as git+ssh:// whenever the lock is
-# generated on a machine with a GitHub SSH remote. There is no SSH key in this
-# build, so force the HTTPS transport for github.com — the commit SHA in the lock
-# is what pins the dependency; the transport that fetches it is not a security
-# property. Without this the build breaks on whoever regenerates the lock next.
-RUN git config --global url."https://github.com/".insteadOf ssh://git@github.com/
 
 WORKDIR /app
 
 # Install from a LOCKFILE, not `npm i <pkg>@<version>`. A version tag is a
 # mutable label; docker/package-lock.json records the integrity hash of every
-# registry tarball in the transitive tree (and the exact commit for the
-# git-sourced redstamp dependency), so the image is byte-reproducible and a
+# tarball in the transitive tree — including redstamp's release tarball, which
+# a git pin could not provide one for — so the image is byte-reproducible and a
 # compromised republish cannot slip in. Bump docker/package.json and regenerate
 # the lock together — never hand-edit it.
 COPY docker/package.json docker/package-lock.json ./
