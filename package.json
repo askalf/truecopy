@@ -1,6 +1,6 @@
 {
   "name": "@askalf/truecopy",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "own your agent skills — vet, sign, and pin every skill & MCP server before it runs. The supply-chain gate for AI agents. Part of Own Your Stack.",
   "type": "module",
   "bin": {
