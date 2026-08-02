@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-08-02
+
+Documentation only — no code, CLI, or detection change. Released so the README
+that npm and [Glama](https://glama.ai/mcp/servers/askalf/truecopy) render is the
+current one: both mirror the copy shipped in the published tarball, so a
+README-only merge never reaches them.
+
+### Fixed
+- **Corrected the scope of the 2,019-skill audit figure.** The hero line read
+  "the full official Claude Code plugin directory (2,019 skills)", which
+  overstates what the official directory alone contains. That study covered the
+  official directory **plus nine community marketplaces** — as the detection
+  section further down already said correctly. The daily watch, by contrast, is
+  official-directory-only, so the two numbers describe different corpora and the
+  compressed phrasing blurred them.
+- **Version references caught up to the shipped release** — the pinned-install
+  example and the `hook install` snippet both still showed `0.10.0`. The snippet
+  documents what `hook install` actually writes, and that command pins the git
+  ref to the running version, so a stale number there misrepresents real output.
+- **Refreshed the watch figures** to the 2026-08-02 run (276 plugins · 1,886
+  skills · 0 poisoned · 455 advisories · 19 accepted), each stated with its
+  date so it reads as a snapshot rather than a claim that silently rots, and
+  linked the live observatory from the watch section as well as the hero.
+
 ## [0.10.1] - 2026-08-01
 
 ### Fixed
