@@ -144,7 +144,11 @@ test('corpus mode: all-clean corpus exits 0 with a green badge and a consumable 
   assert.deepEqual(manifest.flagged, []);
 });
 
-test('corpus mode: fetch failures alone keep exit 0 but turn the badge orange', () => {
+// A fetch failure is a COVERAGE loss (a vendor deleted their repo upstream),
+// not a verdict about anything we scanned. It must not wear the same alarm
+// colour as poison — and, more importantly, the badge must stop advertising the
+// catalog total as though it were the scanned total.
+test('corpus mode: a fetch failure degrades the badge to yellowgreen and reports "N of M" coverage, not the catalog total', () => {
   const dir = path.join(baseDir, 'p-ok');
   put(path.join(dir, 'skills', 'helper', 'SKILL.md'), CLEAN);
   const corpus = mkCorpus('corpus-degraded', [
@@ -154,7 +158,37 @@ test('corpus mode: fetch failures alone keep exit 0 but turn the badge orange', 
   const out = path.join(baseDir, 'out-degraded');
   const r = runWatch(corpus, out);
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(out, 'badge.json'), 'utf8')).color, 'orange');
+  const badge = JSON.parse(fs.readFileSync(path.join(out, 'badge.json'), 'utf8'));
+  // Clean-but-incomplete, NOT the poison alarm.
+  assert.equal(badge.color, 'yellowgreen');
+  // The gap is stated, so the colour is never the only evidence of it.
+  assert.match(badge.message, /^1 of 2 plugins · 1 skills · 0 poisoned/);
+  assert.doesNotMatch(badge.message, /^2 plugins/, 'must not present the catalog total as coverage');
+  // `plugins` keeps its published meaning (catalog total, what history.jsonl
+  // compares); `pluginsScanned` is the new, separate coverage number.
+  const results = JSON.parse(fs.readFileSync(path.join(out, 'results.json'), 'utf8'));
+  assert.equal(results.plugins, 2);
+  assert.equal(results.pluginsScanned, 1);
+  // The human report must not overstate coverage either.
+  const watch = fs.readFileSync(path.join(out, 'WATCH.md'), 'utf8');
+  assert.match(watch, /\*\*1\*\* of \*\*2\*\* plugins/);
+  assert.match(watch, /## ✗ Not scanned/);
+});
+
+// Poison outranks coverage: a run that is both poisoned and incomplete is red.
+test('corpus mode: poison outranks a coverage gap — the badge stays red, never yellowgreen', () => {
+  const dir = path.join(baseDir, 'p-bad-degraded');
+  put(path.join(dir, 'skills', 'sneaky', 'SKILL.md'), POISON);
+  const corpus = mkCorpus('corpus-bad-degraded', [
+    { name: 'p-bad', kind: 'local', dir, status: 'ok' },
+    { name: 'p-404', kind: 'external', url: 'https://github.com/v/x.git', sha: 'e'.repeat(40), status: 'failed', error: 'fetch: not found' },
+  ]);
+  const out = path.join(baseDir, 'out-bad-degraded');
+  const r = runWatch(corpus, out);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const badge = JSON.parse(fs.readFileSync(path.join(out, 'badge.json'), 'utf8'));
+  assert.equal(badge.color, 'red');
+  assert.match(badge.message, /1 of 2 plugins · 1 skills · 1 poisoned/);
 });
 
 test('corpus mode: a vendor repo nesting a different plugin name keeps catalog attribution', () => {

@@ -233,7 +233,18 @@ for (const s of skills) {
 
 const scannedAt = new Date().toISOString();
 const poisoned = flaggedRows.length;
-const summary = { scannedAt, plugins, skills: skills.length, poisoned, accepted: acceptedRows.length, advisories: advisoryCount, pinDrift: pinDrift.length, fetchErrors: fetchErrors.length, linkSkips: linkSkips.length, evidenceMismatches };
+
+// `plugins` stays the CATALOG total — it is the published schema and what
+// history.jsonl compares across runs, so its meaning must not shift. What it is
+// NOT is coverage: a row the fetch step could not materialize was `continue`d
+// above and never scanned. Reporting the catalog total as though it were the
+// scanned total is the same class of dishonesty as dropping a refused symlink
+// from the count, so the two numbers are published separately and every human
+// surface renders "N of M" whenever they diverge.
+const pluginsScanned = plugins - fetchErrors.length;
+const coverage = fetchErrors.length ? `${pluginsScanned} of ${plugins}` : `${plugins}`;
+
+const summary = { scannedAt, plugins, pluginsScanned, skills: skills.length, poisoned, accepted: acceptedRows.length, advisories: advisoryCount, pinDrift: pinDrift.length, fetchErrors: fetchErrors.length, linkSkips: linkSkips.length, evidenceMismatches };
 
 fs.mkdirSync(outDir, { recursive: true });
 const write = (name, data) => fs.writeFileSync(path.join(outDir, name), data);
@@ -241,12 +252,24 @@ const write = (name, data) => fs.writeFileSync(path.join(outDir, name), data);
 write('badge.json', JSON.stringify({
   schemaVersion: 1,
   label: 'marketplace watch',
-  // A refused symlink shows in the badge TEXT when it happens, but does not
-  // change the colour: red/orange mean "something is poisoned or broke", and
-  // declining to follow a link out of the tree is a deliberate, safe refusal.
-  // Silently omitting it from the count is the thing that would be dishonest.
-  message: `${plugins} plugins · ${skills.length} skills · ${poisoned} poisoned · ${advisoryCount} advisories${linkSkips.length ? ` · ${linkSkips.length} unscanned` : ''}`,
-  color: poisoned ? 'red' : (fetchErrors.length ? 'orange' : 'brightgreen'),
+  // Coverage gaps are named in the TEXT, never hidden in the colour and never
+  // dropped from the counts: "274 of 276 plugins" says exactly what was scanned,
+  // and a refused symlink adds "· N unscanned".
+  message: `${coverage} plugins · ${skills.length} skills · ${poisoned} poisoned · ${advisoryCount} advisories${linkSkips.length ? ` · ${linkSkips.length} unscanned` : ''}`,
+  // The colour answers exactly ONE question: did anything we scanned come back
+  // poisoned? red = yes. Nothing else is allowed to borrow that alarm.
+  //
+  // A vendor deleting their repo upstream is a coverage loss, not a verdict
+  // about the corpus — it used to turn the badge orange, which reads as "this
+  // project is in trouble" for someone else's dead repo, with no visible cause
+  // because the count still claimed full coverage. It now degrades brightgreen
+  // → yellowgreen ("clean, but we could not see all of it") and states the gap
+  // in the text, so the colour is never the only evidence.
+  //
+  // A refused symlink stays brightgreen: declining to follow a link out of the
+  // tree is a deliberate, bounded refusal — the design working, not a failure —
+  // and it is already counted in the message.
+  color: poisoned ? 'red' : (fetchErrors.length ? 'yellowgreen' : 'brightgreen'),
 }) + '\n');
 
 // The consumable artifact: what the watch scanned, as name → hash. `flagged`
@@ -276,7 +299,7 @@ md.push('# truecopy marketplace watch');
 md.push('');
 md.push(`> The official Claude Code plugin directory ([anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official)) — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — re-scanned on a schedule by [truecopy](https://github.com/askalf/truecopy). Latest snapshot — history in [history.jsonl](./history.jsonl), methodology in [the 2,019-skill study](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain).`);
 md.push('');
-md.push(`**${scannedAt.slice(0, 10)}** — **${plugins}** plugins · **${skills.length}** skills scanned · **${poisoned}** poisoned · **${advisoryCount}** advisories`);
+md.push(`**${scannedAt.slice(0, 10)}** — ${fetchErrors.length ? `**${pluginsScanned}** of **${plugins}**` : `**${plugins}**`} plugins · **${skills.length}** skills scanned · **${poisoned}** poisoned · **${advisoryCount}** advisories${fetchErrors.length ? ` · **${fetchErrors.length}** unfetched (see below)` : ''}`);
 md.push('');
 if (poisoned) {
   md.push('## ☠ Poisoned');
