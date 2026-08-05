@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-08-05
+
+### Security
+- **Bumped `@askalf/redstamp` 0.7.3 → 0.7.5.** redstamp is truecopy's scanning
+  engine; 0.7.5 fixed a proven live bypass of its deterministic black gate —
+  PowerShell's `-ArgumentList` array form (`'-ExecutionPolicy','Bypass',...`)
+  rated green while the semantically identical space-separated spelling rated
+  black, because both obfuscation lookaheads assumed whitespace between a flag
+  and its value (redstamp#124). A `verify`/`scan` run against 0.7.3 could miss
+  a skill or MCP server using that evasion shape. 0.7.4 (also picked up) fixed
+  a false positive (writing *about* a dangerous command scored black) and
+  closed a gap caught during that same release's own review. Tarball
+  provenance verified via `gh attestation verify` before install.
+
 ## [0.10.2] - 2026-08-02
 
 Documentation only — no code, CLI, or detection change. Released so the README
