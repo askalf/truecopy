@@ -90,10 +90,14 @@
     "reviewed": "2026-08-01"
   },
   "mercadopago:mp-integrate": {
-    "hash": "fd9fc44d2e1d2f69796a4f70d1602e6fdc656d52e22c3f9143522e71df000626",
+    "granularity": "finding-files",
+    "files": {
+      "references/guides/checkout-pro.md": "a0f5304f9a938efc452664f2da6d1b4ff18983df5b6a6493ce751af4ad938ea5",
+      "references/guides/subscriptions.md": "171bdceee1b7f493e7f0c855332549be0b4eb9eaee8b8c77adf5a0b93bb87f96"
+    },
     "class": "capability documentation",
-    "note": "webhook signing-secret integration docs",
-    "reviewed": "2026-07-09"
+    "note": "re-read in full 2026-08-07 after upstream drift lapsed the 07-09 whole-skill accept (catalog now pins mercadopago-claude-marketplace@82bf0b0), and upgraded whole-skill → per-file since these guides are what churn. Both finding-bearing files are runnable Node.js/Express demo apps: MP_ACCESS_TOKEN is read from `.env` and used as `Authorization: Bearer ${TOKEN}` against MercadoPago's OWN API (api.mercadopago.com/v1/checkout/preferences, /preapproval, /preapproval_plan, /v1/orders/:id) — authenticating TO the vendor, never sent elsewhere. 'Copy it, fill in `.env`, run `npm install && node server.js`, open `http://localhost:3000`' (checkout-pro.md:21) is local-dev bootstrap instructions, not an exfil destination — the 'open http://...' target is the developer's own freshly-started local server. Same shape as the already-accepted resend:resend/convex:billing/posthog:setting-up-a-data-warehouse-source signing-secret docs. Whole-file check: zero non-vendor external URLs in either file; no credential is read and sent to a third party anywhere.",
+    "reviewed": "2026-08-07"
   },
   "newrelic:finops": {
     "hash": "889b263a31af7c5e252664ccd68449ff135674613b60ab7360f479677c5bc690",
