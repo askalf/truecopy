@@ -46,14 +46,27 @@ try { accepted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('watch-accepte
 // than a second file to keep in sync. A malformed or stale hash simply never
 // matches — the index can only ever fail closed.
 //
-// Not indexed: whole-skill entries (they record one hash over the joined skill,
-// not per-file) and per-flag entries (they record paths, deliberately, since
-// their whole point is that the bytes may drift). Those reviews contribute
-// nothing here until they are next authored at per-file granularity.
+// Two sources, both meaning "a human read exactly these bytes":
+//   - a per-file entry's `files` map, which is also what that entry gates on;
+//   - any entry's `reviewedFiles` map (#151), which gates nothing. A per-flag
+//     entry deliberately lets its files drift, so it cannot key acceptance to
+//     their hashes — but "these bytes were read on this date" stays true after
+//     they churn, and that is the only claim this index makes. Without it a
+//     per-flag review is invisible to a republish under another catalog name,
+//     which is exactly how the Agentforce rename cost a re-review of bytes
+//     that had already been read twice.
+//
+// Not indexed: whole-skill entries. They record one hash over the JOINED skill,
+// never a file, so there is nothing here to match — and treating one as a file
+// hash would silently widen a legacy entry to any skill sharing a file.
 const reviewedBytes = new Map();
+const isHashMap = (m) => m && typeof m === 'object' && !Array.isArray(m);
 for (const [name, a] of Object.entries(accepted)) {
-  if (!a || a.granularity !== 'finding-files' || !a.files || typeof a.files !== 'object') continue;
-  for (const [file, hash] of Object.entries(a.files)) {
+  if (!a) continue;
+  const maps = [];
+  if (a.granularity === 'finding-files' && isHashMap(a.files)) maps.push(a.files);
+  if (isHashMap(a.reviewedFiles)) maps.push(a.reviewedFiles);
+  for (const m of maps) for (const [file, hash] of Object.entries(m)) {
     if (typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) continue;
     if (!reviewedBytes.has(hash)) reviewedBytes.set(hash, { file, reviewedIn: name, class: a.class, reviewed: a.reviewed });
   }

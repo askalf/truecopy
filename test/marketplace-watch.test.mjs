@@ -451,7 +451,40 @@ test('reviewed bytes: a second copy of a reviewed file inside the same skill is 
   assert.equal(JSON.parse(r2.stdout).poisoned, 1);
 });
 
-test('reviewed bytes: whole-skill and per-flag entries contribute nothing to the index', async () => {
+test('reviewed bytes: a per-flag entry contributes only through reviewedFiles', async () => {
+  const { scan } = await import('../src/index.mjs');
+  const { orig, corpus } = mkTwins('bytes-flags');
+  const hashOf = Object.fromEntries(scan(path.join(orig, 'skills', 'sneaky')).skill.files.map((f) => [f.path, f.hash]));
+  const perFlag = (extra) => ({
+    'p-orig-bytes-flags:sneaky': {
+      granularity: 'finding-flags', files: ['SKILL.md'], flags: POISON_FLAGS, expires: day(30),
+      class: 'test fixture', note: 'per-flag', ...extra,
+    },
+  });
+  const run = (stage, out) => spawnSync(process.execPath, [stage, corpus, path.join(baseDir, out)], { encoding: 'utf8' });
+
+  // bare per-flag: it gates on FLAGS, records only paths, so the index gets nothing
+  const bare = run(stageWatch('stage-bytes-flags-bare', perFlag()), 'out-bytes-flags-bare');
+  assert.equal(bare.status, 1, bare.stdout + bare.stderr);
+  assert.equal(JSON.parse(bare.stdout).poisoned, 1, 'the copy is not covered by paths alone');
+
+  // …with reviewedFiles, the bytes a human actually read are on the record and
+  // the republished copy inherits them — while the per-flag entry itself still
+  // gates on flags, not on these hashes
+  const withFiles = run(stageWatch('stage-bytes-flags-rf', perFlag({ reviewedFiles: { 'SKILL.md': hashOf['SKILL.md'] } })), 'out-bytes-flags-rf');
+  assert.equal(withFiles.status, 0, withFiles.stdout + withFiles.stderr);
+  const s = JSON.parse(withFiles.stdout);
+  assert.equal(s.poisoned, 0);
+  assert.equal(s.accepted, 2);
+  const results = JSON.parse(fs.readFileSync(path.join(baseDir, 'out-bytes-flags-rf', 'results.json'), 'utf8'));
+  const copyRow = results.acceptedDetail.find((x) => x.name === 'p-copy-bytes-flags:sneaky');
+  assert.equal(copyRow.granularity, 'reviewed-bytes');
+  assert.deepEqual(copyRow.reviewedIn, ['p-orig-bytes-flags:sneaky']);
+  // the original is still accepted BY FLAGS — reviewedFiles must not change how it is judged
+  assert.equal(results.acceptedDetail.find((x) => x.name === 'p-orig-bytes-flags:sneaky').granularity, 'finding-flags');
+});
+
+test('reviewed bytes: a whole-skill entry contributes nothing to the index', async () => {
   const { scan, skillHash } = await import('../src/index.mjs');
   const { orig, corpus } = mkTwins('bytes-wholeskill');
   const skill = scan(path.join(orig, 'skills', 'sneaky')).skill;
@@ -557,7 +590,8 @@ test('per-flag acceptance: a reviewed file that is gone fails closed', () => {
   assert.equal(JSON.parse(r.stdout).poisoned, 1);
 });
 
-test('watch-accept --flags measures the flags itself and round-trips through the watch', () => {
+test('watch-accept --flags measures the flags itself and round-trips through the watch', async () => {
+  const { scan } = await import('../src/index.mjs');
   const ACCEPT = fileURLToPath(new URL('../support/watch-accept.mjs', import.meta.url));
   const dir = path.join(baseDir, 'p-author-flags');
   const skillDir = path.join(dir, 'skills', 'sneaky');
@@ -573,6 +607,10 @@ test('watch-accept --flags measures the flags itself and round-trips through the
   assert.match(entry.expires, /^\d{4}-\d{2}-\d{2}$/);
   assert.ok(entry.expires > day(0), 'expiry is in the future');
   assert.match(entry.reviewedHash, /^[0-9a-f]{64}$/); // audit anchor: the bytes a human read
+  // …and the per-FILE hashes, so a per-flag review is visible to the byte index
+  // even though this entry never gates on them (#151)
+  const authoredHashes = Object.fromEntries(scan(skillDir).skill.files.map((f) => [f.path, f.hash]));
+  assert.deepEqual(entry.reviewedFiles, { 'SKILL.md': authoredHashes['SKILL.md'] });
 
   const corpus = mkCorpus('corpus-author-flags', [{ name: 'p-author-flags', kind: 'local', dir, status: 'ok' }]);
   const staged = stageWatch('stage-author-flags', { 'p-author-flags:sneaky': { ...entry, class: 'test fixture', note: 'authored' } });
