@@ -358,6 +358,34 @@ test('watch-accept --files emits an entry the watch accepts, keyed to the findin
   assert.equal(JSON.parse(w.stdout).accepted, 1);
 });
 
+// ── triage kit (#153): the COMPLETE finding-bearing set, not just first hits ──
+
+test('a flagged row names every finding-bearing file, not just the evidence hits', async () => {
+  const { scan } = await import('../src/index.mjs');
+  const dir = path.join(baseDir, 'p-triage');
+  const skillDir = path.join(dir, 'skills', 'sneaky');
+  put(path.join(skillDir, 'SKILL.md'), POISON);
+  put(path.join(skillDir, 'references', 'more.md'), POISON2); // a SECOND finding-bearing file
+  put(path.join(skillDir, 'docs', 'notes.md'), CLEAN);
+  const corpus = mkCorpus('corpus-triage', [{ name: 'p-triage', kind: 'local', dir, status: 'ok' }]);
+  const r = runWatch(corpus, path.join(baseDir, 'out-triage'));
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+
+  const results = JSON.parse(fs.readFileSync(path.join(baseDir, 'out-triage', 'results.json'), 'utf8'));
+  const row = results.flagged[0];
+  const hashOf = Object.fromEntries(scan(skillDir).skill.files.map((f) => [f.path, f.hash]));
+  assert.deepEqual(row.triage.files, {
+    'SKILL.md': hashOf['SKILL.md'],
+    'references/more.md': hashOf['references/more.md'],
+  }, 'both finding-bearing files, at the bytes scanned');
+  assert.equal(row.triage.attributable, true);
+  assert.ok(!('docs/notes.md' in row.triage.files), 'a clean file is not in the set');
+  // the point of the kit: evidence alone under-reports the set a reviewer must read
+  assert.ok(row.triage.files['references/more.md'], 'the second file is reachable without re-deriving it');
+  // and nothing paste-ready is published — reading the bytes is the job
+  assert.ok(!('entry' in row.triage) && !('class' in row.triage));
+});
+
 // ── byte-keyed review index (#149): the review follows the CONTENT, not the name ──
 
 // Two catalog names, the same finding-bearing bytes — the shape that put
