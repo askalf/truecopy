@@ -49,7 +49,7 @@ jobs:
           set -o pipefail # without it `|| status=$?` reads tee's exit 0, and a poisoned scan stays green
           status=0
           node support/marketplace-watch.mjs "$RUNNER_TEMP/corpus" "$RUNNER_TEMP/out" | tee "$RUNNER_TEMP/summary.json" || status=$?
-          if [ "$status" -ge 2 ]; then exit "$status"; fi # 2 = the watch itself broke; 1 (poisoned) still publishes below
+          if [ "$status" -ge 2 ]; then exit "$status"; fi # 2 = the watch itself broke; 1 (something flagged) still publishes below
           echo "status=$status" >> "$GITHUB_OUTPUT"
           {
             echo '### marketplace watch'
@@ -76,8 +76,8 @@ jobs:
           git commit -q -m "watch: $(date -u +%F) — $(cat "$RUNNER_TEMP/summary.json")"
           git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" watch
 
-      - name: Fail the run if anything was poisoned
+      - name: Fail the run if anything needs triage
         if: steps.scan.outputs.status != '0'
         run: |
-          echo "::error::marketplace watch found poisoned skills — see WATCH.md on the watch branch"
+          echo "::error::marketplace watch flagged skills that need human triage — see the Under review section of WATCH.md on the watch branch"
           exit 1
