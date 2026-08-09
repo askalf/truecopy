@@ -33,6 +33,32 @@ const ADVISORY_ROWS_SHOWN = 80; // WATCH.md stays readable; results.json has eve
 let accepted = {};
 try { accepted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('watch-accepted.json', import.meta.url)), 'utf8')); } catch { /* no accept file = accept nothing */ }
 
+// ── Byte-keyed review index (#149) ──
+// Every acceptance above is keyed `plugin:skill`, but what a human actually read
+// is BYTES. When a vendor republishes the same skill under a second catalog name
+// (Salesforce shipped the Agentforce skills again from their official CLI repo:
+// 7 of the 8 finding-bearing files were byte-identical to files already reviewed
+// under `agentforce-adlc`), or forks one, or re-pins without touching the
+// finding-bearing file, the name key matches nothing and a reviewer re-derives a
+// conclusion the repo already holds. The review is a property of the content, so
+// index it by content: every per-file entry already records the sha256 of each
+// finding-bearing file, so the index is a VIEW over watch-accepted.json rather
+// than a second file to keep in sync. A malformed or stale hash simply never
+// matches — the index can only ever fail closed.
+//
+// Not indexed: whole-skill entries (they record one hash over the joined skill,
+// not per-file) and per-flag entries (they record paths, deliberately, since
+// their whole point is that the bytes may drift). Those reviews contribute
+// nothing here until they are next authored at per-file granularity.
+const reviewedBytes = new Map();
+for (const [name, a] of Object.entries(accepted)) {
+  if (!a || a.granularity !== 'finding-files' || !a.files || typeof a.files !== 'object') continue;
+  for (const [file, hash] of Object.entries(a.files)) {
+    if (typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) continue;
+    if (!reviewedBytes.has(hash)) reviewedBytes.set(hash, { file, reviewedIn: name, class: a.class, reviewed: a.reviewed });
+  }
+}
+
 const scanPieces = (skill, pieces) =>
   scanSkill({ kind: 'skill', name: skill.name, scanTargets: [{ name: skill.name, description: joinScanText(pieces) }] });
 
@@ -121,6 +147,45 @@ function coversFlags(a, skill, now = Date.now()) {
   // is an artifact of something outside them. Fail closed rather than silence it.
   if (!got.findings.length) return false;
   return got.findings.every((f) => (f.flags || []).every((w) => flags.has(w)));
+}
+
+/**
+ * Does the byte index alone cover this flagged skill? (#149)
+ *
+ * Same remainder proof `finding-files` relies on — everything OUTSIDE the
+ * reviewed files must scan clean, so a clean remainder proves every current
+ * finding lives in a reviewed, byte-identical file — plus one requirement
+ * per-file does not carry: the reviewed files must actually FLAG on their own.
+ * per-file gets attribution for free because a human named that skill and the
+ * authoring helper refused to emit an entry it could not attribute; byte
+ * coverage applies with no entry for this skill at all, so it proves attribution
+ * instead of assuming it. A finding that exists only across a join boundary —
+ * carried by no single reviewed file — is therefore NOT covered, and flags.
+ *
+ * Hash is the whole key: identical bytes are identical wherever they sit, so the
+ * reviewed path is recorded for provenance and never matched on. What this does
+ * NOT do is widen a review to bytes nobody read — an attacker who copies a
+ * reviewed file into a poisoned skill gets that file excluded and their own
+ * payload scanned exactly as before, because it lives in the remainder.
+ */
+function coveredByReviewedBytes(skill) {
+  if (!reviewedBytes.size) return null;
+  const hashOf = Object.fromEntries((skill.files || []).map((f) => [f.path, f.hash]));
+  const pieces = skill.scanPieces || [];
+  const isReviewed = (p) => reviewedBytes.has(hashOf[p.path]);
+  const inside = pieces.filter(isReviewed);
+  if (!inside.length) return null;                                            // nothing reviewed here
+  const outside = pieces.filter((p) => !isReviewed(p));
+  if (outside.length && scanPieces(skill, outside).verdict !== 'clean') return null;
+  if (scanPieces(skill, inside).verdict === 'clean') return null;             // unattributable — fail closed
+  const rows = inside.map((p) => reviewedBytes.get(hashOf[p.path]));
+  const sources = [...new Set(rows.map((r) => r.reviewedIn))];
+  return {
+    class: [...new Set(rows.map((r) => r.class).filter(Boolean))].join(' + ') || 'reviewed bytes',
+    note: `every finding-bearing file here is byte-identical to one already read end to end under ${sources.join(', ')} — same bytes, different catalog name`,
+    files: inside.map((p) => p.path),
+    reviewedIn: sources,
+  };
 }
 
 // evidenceOf() locates matches against `skill.scanPieces`, which are paths
@@ -218,11 +283,19 @@ for (const s of skills) {
     const ev = evidenceOf(r.findings, r.skill); evidenceMismatches += ev.mismatches;
     const evidence = withRepoPaths(ev.evidence, s.skillPath);
     const a = accepted[s.name];
-    if (a && covers(a, r.skill)) acceptedRows.push({
-      name: s.name, findings, class: a.class, note: a.note, evidence,
-      ...(a.granularity ? { granularity: a.granularity } : {}),
-      ...(a.expires ? { expires: a.expires } : {}),
-      ...(a.reviewedHash ? { drifted: a.reviewedHash !== skillHash(r.skill) } : {}),
+    // A name-keyed acceptance wins; the byte index is the fallback, so a skill
+    // with its own reviewed entry keeps that entry's class, note and expiry.
+    const named = a && covers(a, r.skill) ? a : null;
+    const bytes = named ? null : coveredByReviewedBytes(r.skill);
+    if (named) acceptedRows.push({
+      name: s.name, findings, class: named.class, note: named.note, evidence,
+      ...(named.granularity ? { granularity: named.granularity } : {}),
+      ...(named.expires ? { expires: named.expires } : {}),
+      ...(named.reviewedHash ? { drifted: named.reviewedHash !== skillHash(r.skill) } : {}),
+    });
+    else if (bytes) acceptedRows.push({
+      name: s.name, findings, class: bytes.class, note: bytes.note, evidence,
+      granularity: 'reviewed-bytes', reviewedIn: bytes.reviewedIn, reviewedFiles: bytes.files,
     });
     else flaggedRows.push({ name: s.name, verdict: r.verdict, findings, evidence });
   } else if (advisories.length) {
@@ -316,8 +389,11 @@ if (acceptedRows.length) {
   md.push('');
   md.push('Entries marked *per-flag* are the weakest of the three and say so: the reviewed file may change, and the acceptance holds while the flags it produces stay within the reviewed set. Used only where the finding-bearing file is itself the thing that churns. Everything outside the reviewed files must still scan clean, a **new** flag re-flags, the entry lapses on the date shown — at which point a human re-reads it or it goes back on the board — and *changed since review* means the vendor has edited the skill since the bytes a human actually read.');
   md.push('');
+  md.push('Entries marked *reviewed bytes* carry no entry of their own: every finding-bearing file in them is byte-identical to a file already read end to end under the skill named in the note — the same content republished under a second catalog name, forked, or re-pinned untouched. The remainder of the skill must still scan clean, the reviewed files must still carry the findings themselves, and a single changed byte drops the skill back to a normal scan.');
+  md.push('');
   for (const r of acceptedRows) {
     const gran = r.granularity === 'finding-files' ? ' *(per-file)*'
+      : r.granularity === 'reviewed-bytes' ? ' *(reviewed bytes)*'
       : r.granularity === 'finding-flags' ? ` *(per-flag, expires ${r.expires}${r.drifted ? ', changed since review' : ''})*` : '';
     md.push(`- **${r.name}** — ${r.findings.join(' · ')} — *${r.class}${r.note ? `: ${r.note}` : ''}*${gran}`);
   }
