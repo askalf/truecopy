@@ -98,6 +98,8 @@ if (scanOne(pieces.filter((p) => !bearing.includes(p))).verdict !== 'clean') {
   process.exit(2);
 }
 
+const hashOf = Object.fromEntries(r.skill.files.map((f) => [f.path, f.hash]));
+
 if (wantFlags) {
   // The flags the reviewed files actually produce, scanned exactly as the watch
   // scans them (together, through the same piece join) — never a hand-typed list.
@@ -114,12 +116,17 @@ if (wantFlags) {
   console.log(JSON.stringify({
     granularity: 'finding-flags', files: bearing.map((p) => p.path), flags, expires,
     reviewedHash: skillHash(r.skill), // audit anchor + drift reporting; does NOT gate acceptance
+    // The bytes actually read, for the byte index (#149). This entry does not
+    // gate on them — per-flag exists precisely because these files churn — but
+    // "a human read THESE bytes on THIS date" stays true after they churn, and
+    // it is the only claim the index makes. Recording them here is what stops a
+    // per-flag review being invisible to a republish under another catalog name.
+    reviewedFiles: Object.fromEntries(bearing.map((p) => [p.path, hashOf[p.path]])),
     ...entry,
   }, null, 2));
   process.exit(0);
 }
 
-const hashOf = Object.fromEntries(r.skill.files.map((f) => [f.path, f.hash]));
 const files = Object.fromEntries(bearing.map((p) => [p.path, hashOf[p.path]]));
 console.error(`finding-bearing files: ${Object.keys(files).join(', ') || '(none)'}`);
 console.log(JSON.stringify({ granularity: 'finding-files', files, ...entry }, null, 2));
