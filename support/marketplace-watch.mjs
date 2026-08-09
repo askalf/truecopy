@@ -201,6 +201,39 @@ function coveredByReviewedBytes(skill) {
   };
 }
 
+/**
+ * The finding-bearing files of a flagged skill, for whoever triages it (#153).
+ *
+ * `evidence` names the FIRST hit per flag, which is not the same set: a skill
+ * can carry four flags across six files, and a reviewer working from the
+ * evidence rows alone would read four of them and write an under-scoped review.
+ * This is the same attribution `watch-accept.mjs --files` performs — each file
+ * scanned alone, then the remainder checked — so the reviewer starts from the
+ * complete set instead of re-deriving it after materializing the corpus.
+ *
+ * `attributable: false` means no single file carries the findings on its own
+ * (a match spanning a join boundary), which is exactly when per-file
+ * granularity must NOT be used — surfacing it here saves discovering it at
+ * authoring time.
+ *
+ * Deliberately NOT published: a paste-ready acceptance entry. The whole system
+ * rests on a human having actually read the bytes, and a pre-filled entry on a
+ * public page invites pasting instead of reading. Facts, not a shortcut past
+ * the part that matters.
+ */
+function findingBearingFiles(skill) {
+  const pieces = skill.scanPieces || [];
+  if (!pieces.length) return null;
+  const hashOf = Object.fromEntries((skill.files || []).map((f) => [f.path, f.hash]));
+  const bearing = pieces.filter((p) => scanPieces(skill, [p]).verdict !== 'clean');
+  if (!bearing.length) return { files: {}, attributable: false };
+  const rest = pieces.filter((p) => !bearing.includes(p));
+  return {
+    files: Object.fromEntries(bearing.map((p) => [p.path, hashOf[p.path]])),
+    attributable: !rest.length || scanPieces(skill, rest).verdict === 'clean',
+  };
+}
+
 // evidenceOf() locates matches against `skill.scanPieces`, which are paths
 // relative to the SKILL's own directory — but a plugin's declared source (what
 // the site resolves a github.com/.../tree/<sha> link from, in marketplace.json)
@@ -310,7 +343,7 @@ for (const s of skills) {
       name: s.name, findings, class: bytes.class, note: bytes.note, evidence,
       granularity: 'reviewed-bytes', reviewedIn: bytes.reviewedIn, reviewedFiles: bytes.files,
     });
-    else flaggedRows.push({ name: s.name, verdict: r.verdict, findings, evidence });
+    else flaggedRows.push({ name: s.name, verdict: r.verdict, findings, evidence, triage: findingBearingFiles(r.skill) });
   } else if (advisories.length) {
     const ev = evidenceOf(r.advisories, r.skill); evidenceMismatches += ev.mismatches;
     advisoryRows.push({ name: s.name, advisories, evidence: withRepoPaths(ev.evidence, s.skillPath) });
