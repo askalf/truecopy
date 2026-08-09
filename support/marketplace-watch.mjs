@@ -10,8 +10,11 @@
 // by its canon-corpus.json — the full directory: in-repo plugins + external
 // vendor plugins at their catalog-pinned SHAs) or, legacy mode, a plain
 // marketplace clone (`plugins/` + `external_plugins/` trees) scanned in place.
-// Exit 0 when nothing is poisoned; exit 1 the moment anything flags, so the
-// scheduled run goes red and someone looks. Offline like the rest of truecopy:
+// Exit 0 when nothing flags; exit 1 the moment anything does, so the scheduled
+// run goes red and someone looks. What flags is published as `poisoned` in the
+// JSON (the schema history.jsonl compares across runs) but rendered as UNDER
+// REVIEW for humans — until a person triages it, a detector hit is not a verdict
+// about a named vendor (#152). Offline like the rest of truecopy:
 // the workflow fetches, this script only reads disk.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -374,7 +377,7 @@ write('badge.json', JSON.stringify({
   // Coverage gaps are named in the TEXT, never hidden in the colour and never
   // dropped from the counts: "274 of 276 plugins" says exactly what was scanned,
   // and a refused symlink adds "· N unscanned".
-  message: `${coverage} plugins · ${skills.length} skills · ${poisoned} poisoned · ${advisoryCount} advisories${linkSkips.length ? ` · ${linkSkips.length} unscanned` : ''}`,
+  message: `${coverage} plugins · ${skills.length} skills · ${poisoned} under review · ${advisoryCount} advisories${linkSkips.length ? ` · ${linkSkips.length} unscanned` : ''}`,
   // The colour answers exactly ONE question: did anything we scanned come back
   // poisoned? red = yes. Nothing else is allowed to borrow that alarm.
   //
@@ -405,6 +408,12 @@ write('directory-manifest.json', JSON.stringify({
 
 write('results.json', JSON.stringify({
   ...summary,
+  // The calibration the "under review" rows need to be read honestly, published
+  // rather than left for a reader to count by hand: how many skills have ever
+  // been triaged and come back benign. Deliberately NOT in the stdout summary —
+  // that line is appended to history.jsonl and compared across runs, so it stays
+  // the per-run facts only.
+  triagedBenign: Object.keys(accepted).length,
   flagged: flaggedRows,
   acceptedDetail: acceptedRows,
   advisoryDetail: advisoryRows,
@@ -418,10 +427,26 @@ md.push('# truecopy marketplace watch');
 md.push('');
 md.push(`> The official Claude Code plugin directory ([anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official)) — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — re-scanned on a schedule by [truecopy](https://github.com/askalf/truecopy). Latest snapshot — history in [history.jsonl](./history.jsonl), methodology in [the 2,019-skill study](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain).`);
 md.push('');
-md.push(`**${scannedAt.slice(0, 10)}** — ${fetchErrors.length ? `**${pluginsScanned}** of **${plugins}**` : `**${plugins}**`} plugins · **${skills.length}** skills scanned · **${poisoned}** poisoned · **${advisoryCount}** advisories${fetchErrors.length ? ` · **${fetchErrors.length}** unfetched (see below)` : ''}`);
+md.push(`**${scannedAt.slice(0, 10)}** — ${fetchErrors.length ? `**${pluginsScanned}** of **${plugins}**` : `**${plugins}**`} plugins · **${skills.length}** skills scanned · **${poisoned}** under review · **${advisoryCount}** advisories${fetchErrors.length ? ` · **${fetchErrors.length}** unfetched (see below)` : ''}`);
 md.push('');
 if (poisoned) {
-  md.push('## ☠ Poisoned');
+  // TRIAGE GATE (#152). This section names a third-party vendor's skill on a
+  // public page, and until a human has looked, all it holds is raw detector
+  // output — a regex matched a string. Every skill triaged to date has come
+  // back benign (they are the accepted list below): defensive quoting, shipped
+  // red-team fixtures, docs teaching credential handling. Publishing "poisoned"
+  // against a named vendor on that base is a claim the evidence does not
+  // support, so the heading states what is actually true — flagged, awaiting
+  // review — and a confirmed finding gets reported to the vendor and rendered
+  // as its own thing when there ever is one.
+  //
+  // The alarm is unchanged: the run still exits 1, the badge still goes red,
+  // and the `poisoned` key stays in results.json/history.jsonl because that is
+  // the published schema history.jsonl compares across runs. This is how the
+  // number is DESCRIBED, not what is counted or how loudly.
+  md.push('## ⏳ Under review');
+  md.push('');
+  md.push(`Skills the scanner flagged that a human has **not yet triaged**. These are detector hits, not verdicts — a string matched a rule, and what that means is exactly the question a person still has to answer. For calibration: **${Object.keys(accepted).length}** skills have been triaged and accepted as benign so far (listed below), most of them defensive prose quoting an attack in order to refuse it, or a security-testing skill shipping the attack corpus that is its whole product.`);
   md.push('');
   for (const r of flaggedRows) {
     md.push(`- **${r.name}** — ${r.findings.join(' · ')}`);

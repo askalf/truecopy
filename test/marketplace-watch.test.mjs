@@ -100,7 +100,7 @@ test('corpus mode: poisoned skill flags, drift and fetch errors are reported, ex
   assert.equal(summary.fetchErrors, 1);
   const badge = JSON.parse(fs.readFileSync(path.join(out, 'badge.json'), 'utf8'));
   assert.equal(badge.color, 'red');
-  assert.match(badge.message, /4 plugins · 3 skills · 1 poisoned/);
+  assert.match(badge.message, /4 plugins · 3 skills · 1 under review/);
   const results = JSON.parse(fs.readFileSync(path.join(out, 'results.json'), 'utf8'));
   assert.deepEqual(results.flagged.map((f) => f.name), ['p-evil:sneaky']);
   assert.equal(results.pinDriftDetail[0].name, 'p-drift');
@@ -110,7 +110,12 @@ test('corpus mode: poisoned skill flags, drift and fetch errors are reported, ex
   assert.deepEqual(manifest.flagged, ['p-evil:sneaky']);
   assert.ok(manifest.skills['p-evil:sneaky']);
   const watchMd = fs.readFileSync(path.join(out, 'WATCH.md'), 'utf8');
-  assert.match(watchMd, /## ☠ Poisoned/);
+  // TRIAGE GATE (#152): an untriaged detector hit is published as "under
+  // review", never as a verdict against the named vendor — while the exit code,
+  // the red badge and the `poisoned` JSON key are all unchanged above.
+  assert.match(watchMd, /## ⏳ Under review/);
+  assert.doesNotMatch(watchMd, /Poisoned/);
+  assert.match(watchMd, /detector hits, not verdicts/);
   assert.match(watchMd, /## ⚠ Pin drift/);
   assert.match(watchMd, /## ✗ Not scanned/);
 });
@@ -167,7 +172,7 @@ test('corpus mode: a fetch failure degrades the badge to yellowgreen and reports
   // Clean-but-incomplete, NOT the poison alarm.
   assert.equal(badge.color, 'yellowgreen');
   // The gap is stated, so the colour is never the only evidence of it.
-  assert.match(badge.message, /^1 of 2 plugins · 1 skills · 0 poisoned/);
+  assert.match(badge.message, /^1 of 2 plugins · 1 skills · 0 under review/);
   assert.doesNotMatch(badge.message, /^2 plugins/, 'must not present the catalog total as coverage');
   // `plugins` keeps its published meaning (catalog total, what history.jsonl
   // compares); `pluginsScanned` is the new, separate coverage number.
@@ -193,7 +198,7 @@ test('corpus mode: poison outranks a coverage gap — the badge stays red, never
   assert.equal(r.status, 1, r.stdout + r.stderr);
   const badge = JSON.parse(fs.readFileSync(path.join(out, 'badge.json'), 'utf8'));
   assert.equal(badge.color, 'red');
-  assert.match(badge.message, /1 of 2 plugins · 1 skills · 1 poisoned/);
+  assert.match(badge.message, /1 of 2 plugins · 1 skills · 1 under review/);
 });
 
 test('corpus mode: a vendor repo nesting a different plugin name keeps catalog attribution', () => {
