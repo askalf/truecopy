@@ -18,7 +18,7 @@
 # that exists to make agents pin their supply chain has to pin its own. Dependabot
 # watches both (`docker` + `/docker` npm in .github/dependabot.yml), so the pins
 # get bumped deliberately instead of drifting silently.
-FROM node:26-slim@sha256:deae974a69e140f44f434ab29cb519fb5f8fe250fd364b8ca446bd0761acdc6a
+FROM node:26-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503
 
 # CA certs for HTTPS while npm resolves the tree. git is deliberately NOT
 # installed: as of truecopy 0.10.1 the redstamp dependency is a signed release
