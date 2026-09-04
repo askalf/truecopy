@@ -68,10 +68,7 @@ test('labels named in the config exist in the repo label set', () => {
   // a default colour and no description, which is how label sets turn to mush.
   const labels = [...config.matchAll(/^'?([a-z][a-z0-9 :_-]*)'?:$/gim)].map((m) => m[1].trim());
   assert.ok(labels.includes('tests'), 'expected a tests label rule');
-  assert.ok(
-    labels.some((l) => l.startsWith('area: ')),
-    'expected at least one area: label rule',
-  );
+  assert.ok(labels.length >= 5, `only ${labels.length} label rules — did the file shape change?`);
   for (const l of labels) {
     assert.ok(l === l.toLowerCase(), `label "${l}" is not lowercase — GitHub labels are case-sensitive`);
   }

@@ -1,17 +1,13 @@
-# Path-based PR labels (actions/labeler v7 syntax).
+# Path → label map for .github/workflows/pr-triage.yml (actions/labeler v7).
 #
-# WHY: dependabot labels its own PRs, so `dependencies` + ecosystem labels were
-# the only labels this repo ever applied — every human- and agent-authored PR
-# arrived bare (#157, #159, #161, #164, #166 all had zero). A label set that
-# only covers robots is not a label set.
+# Additive only: sync-labels is off, so nothing here ever strips a label a
+# human — or Dependabot — put on a PR by hand. Add a path, get a label.
 #
-# Labels are AREAS, not severities or statuses: a path can tell you what a PR
-# touches, never how urgent it is or whether it is ready. Anything requiring
-# judgement (`blocked`, `bug`, `enhancement`) stays human- or template-applied.
-#
-# Rules are additive — a PR touching src/scan.mjs and test/ gets both labels.
+# Label names match the Own Your Stack family vocabulary (redstamp is the
+# reference): bare nouns, not `area:` prefixes, so a reader moving between
+# repos sees the same words for the same things.
 
-'area: detector':
+detection:
   - changed-files:
       - any-glob-to-any-file:
           - 'src/scan.mjs'
@@ -19,7 +15,8 @@
           - 'src/claude.mjs'
           - 'src/index.mjs'
 
-'area: lockfile':
+# The supply-chain core: what a pin IS, and how it is proven.
+lockfile:
   - changed-files:
       - any-glob-to-any-file:
           - 'src/lock.mjs'
@@ -28,21 +25,21 @@
           - 'src/keychain.mjs'
           - 'truecopy.lock'
 
-'area: cli':
+cli:
   - changed-files:
       - any-glob-to-any-file:
           - 'src/cli.mjs'
           - 'src/mcp-cli.mjs'
 
-'area: mcp':
+mcp:
   - changed-files:
       - any-glob-to-any-file:
           - 'src/mcp.mjs'
           - 'src/mcp-serve.mjs'
           - 'src/mcp-cli.mjs'
 
-# The marketplace watch: scanner harness, acceptance ledger, triage issue filing.
-'area: watch':
+# The marketplace watch: scanner harness, acceptance ledger, triage issues.
+watch:
   - changed-files:
       - any-glob-to-any-file:
           - 'support/**'
@@ -52,12 +49,19 @@ tests:
   - changed-files:
       - any-glob-to-any-file:
           - 'test/**'
-          - 'fuzz/**'
           - '**/*.test.mjs'
+
+fuzz:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'fuzz/**'
           - '.clusterfuzzlite/**'
 
-# Reuses the label dependabot already created for its own action bumps, so CI
-# changes read the same whoever authored them.
+examples:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'demo/**'
+
 github_actions:
   - changed-files:
       - any-glob-to-any-file:
@@ -72,7 +76,7 @@ docker:
           - 'docker/**'
 
 # Prose only. Scoped to the docs that exist rather than a bare '**/*.md', so a
-# PR that ships code plus its README paragraph is not filed as documentation.
+# PR shipping code plus its README paragraph is not filed as documentation.
 documentation:
   - changed-files:
       - any-glob-to-any-file:
