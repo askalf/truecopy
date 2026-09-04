@@ -26,21 +26,16 @@
 //      opening a real issue to look at it.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 const LABEL = 'watch-triage';
 const MAX_PER_RUN = 10; // a real supply-chain event must not open 200 issues
 const DRY_RUN = process.env.DRY_RUN === '1';
 
+// Read, not validated, at module load: the arg/env checks live in main() so
+// importing this file for its formatting helpers cannot exit the process.
 const resultsPath = process.argv[2];
-if (!resultsPath) {
-  console.error('usage: watch-issues.mjs <results.json>');
-  process.exit(2);
-}
 const repo = process.env.GITHUB_REPOSITORY;
-if (!repo) {
-  console.error('GITHUB_REPOSITORY is required');
-  process.exit(2);
-}
 const runId = process.env.GITHUB_RUN_ID;
 const runLink = runId ? `https://github.com/${repo}/actions/runs/${runId}` : null;
 
@@ -62,14 +57,26 @@ function gh(args, { input } = {}) {
   return r.stdout;
 }
 
-const titleFor = (name) => `watch triage: ${name} — flagged, awaiting review`;
+export const titleFor = (name) => `watch triage: ${name} — flagged, awaiting review`;
 
-// A table cell. Pipes are escaped even inside code spans — GFM splits on a raw
-// `|` regardless — and newlines collapse, since a row is one line.
-const cell = (s) =>
+// A table cell. Pipes are escaped even inside code spans — GFM splits a row on
+// any `|` that is not backslash-escaped, code span or not — and newlines
+// collapse, since a row is one line.
+export const cell = (s) =>
   String(s ?? '')
-    .replace(/\|/g, '\\|')
     .replace(/\r?\n/g, ' ')
+    // GFM splits a row on a `|` that is not backslash-escaped, and it decides
+    // that by the backslash PARITY in front of the pipe. So escaping the pipe
+    // alone is not enough: source text that already reads `\|` becomes `\\|`,
+    // which is an escaped backslash followed by a BARE pipe, and the row gains a
+    // column. Skill docs are markdown and full of tables, so `\|` arrives
+    // routinely — this is the js/incomplete-sanitization CodeQL flagged.
+    //
+    // Only the backslash run immediately before a pipe is doubled, rather than
+    // every backslash in the string: inside a code span the table extension
+    // unescapes `\|` but leaves `\\` alone, so blanket doubling would render
+    // `C:\path` as `C:\\path` and quietly corrupt the evidence a reviewer reads.
+    .replace(/(\\*)\|/g, (_m, slashes) => slashes.replace(/\\/g, '\\\\') + '\\|')
     .trim();
 
 // Matched text is arbitrary source, and skill prose is full of backticks: the
@@ -78,7 +85,7 @@ const cell = (s) =>
 // CommonMark's rule is that a span delimited by N backticks may contain runs of
 // fewer than N, so pick a fence one longer than the longest run present, and pad
 // when the content itself starts or ends with a backtick.
-const code = (s) => {
+export const code = (s) => {
   const t = cell(s);
   if (!t) return '';
   const longest = Math.max(0, ...[...t.matchAll(/`+/g)].map((m) => m[0].length));
@@ -87,7 +94,7 @@ const code = (s) => {
   return `${fence}${pad}${t}${pad}${fence}`;
 };
 
-function body(entry) {
+export function body(entry) {
   const L = [];
   L.push('<!-- truecopy-watch-triage -->');
   L.push('');
@@ -145,6 +152,16 @@ function body(entry) {
   }
   if (runLink) L.push(`- flagged by [run #${runId}](${runLink})`);
   return L.join('\n');
+}
+
+function main() {
+if (!resultsPath) {
+  console.error('usage: watch-issues.mjs <results.json>');
+  process.exit(2);
+}
+if (!repo) {
+  console.error('GITHUB_REPOSITORY is required');
+  process.exit(2);
 }
 
 const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
@@ -219,3 +236,9 @@ if (deferred > 0) {
     `::warning::${deferred} flagged skill(s) beyond the ${MAX_PER_RUN}-issue cap were not filed this run — they file on the next one`,
   );
 }
+}
+
+// Only act when invoked as a command. Importing the module (watch-issues.test.mjs
+// covers the markdown escaping, which is where the sharp edges are) must not
+// reach for gh or the filesystem.
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main();
