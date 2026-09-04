@@ -1,0 +1,53 @@
+name: False positive — truecopy flagged something benign
+description: A skill, plugin or manifest truecopy reports as poisoned or flagged that you believe is safe.
+title: 'false positive: '
+labels: ['false positive']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this — false positives are the failure mode that
+        matters most for a scanner people are asked to trust, and a report with
+        the matched text in it is usually enough to fix the rule.
+
+        **If you are the author of the skill:** a flag is not an accusation. The
+        detector matched a string; what that string means is exactly the
+        question this issue exists to answer, and most flags resolve as benign.
+
+  - type: input
+    id: target
+    attributes:
+      label: What was scanned
+      description: Skill or plugin name, and the source if it is public.
+      placeholder: 'mercadopago:mp-integrate — github.com/vendor/repo at abc1234'
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: truecopy output
+      description: The full verdict, including the flag names and the matched text. `truecopy scan <dir>` or the WATCH.md row.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why you believe it is benign
+      description: >
+        What the matched text is actually doing. The most useful reports name
+        the mechanism — "this is a Bearer header authenticating to our own API",
+        "this is prose quoting an attack in order to refuse it", "this is a
+        security-testing skill and the attack corpus is the product".
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: truecopy version
+      placeholder: '0.10.3 (`truecopy --version`)'
+    validations:
+      required: false

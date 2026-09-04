@@ -1,0 +1,53 @@
+name: Bug report
+description: truecopy did something other than what it says it does.
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a **missed detection** or a **wrong flag**, please use the
+        false-positive template or the security advisory link instead — those
+        need different information than a crash does.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, and what it did.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        The smallest thing that shows it. A lock file, a manifest, or a skill
+        directory is ideal — attach it if you can share it.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: truecopy version
+      placeholder: '0.10.3 (`truecopy --version`)'
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: OS and Node version
+      placeholder: 'macOS 15.2, node 22.11.0'
+    validations:
+      required: true

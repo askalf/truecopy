@@ -1,0 +1,85 @@
+# Path-based PR labels (actions/labeler v7 syntax).
+#
+# WHY: dependabot labels its own PRs, so `dependencies` + ecosystem labels were
+# the only labels this repo ever applied — every human- and agent-authored PR
+# arrived bare (#157, #159, #161, #164, #166 all had zero). A label set that
+# only covers robots is not a label set.
+#
+# Labels are AREAS, not severities or statuses: a path can tell you what a PR
+# touches, never how urgent it is or whether it is ready. Anything requiring
+# judgement (`blocked`, `bug`, `enhancement`) stays human- or template-applied.
+#
+# Rules are additive — a PR touching src/scan.mjs and test/ gets both labels.
+
+'area: detector':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/scan.mjs'
+          - 'src/gate.mjs'
+          - 'src/claude.mjs'
+          - 'src/index.mjs'
+
+'area: lockfile':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/lock.mjs'
+          - 'src/hash.mjs'
+          - 'src/sign.mjs'
+          - 'src/keychain.mjs'
+          - 'truecopy.lock'
+
+'area: cli':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/cli.mjs'
+          - 'src/mcp-cli.mjs'
+
+'area: mcp':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/mcp.mjs'
+          - 'src/mcp-serve.mjs'
+          - 'src/mcp-cli.mjs'
+
+# The marketplace watch: scanner harness, acceptance ledger, triage issue filing.
+'area: watch':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'support/**'
+          - '.github/workflows/marketplace-watch.yml'
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'test/**'
+          - 'fuzz/**'
+          - '**/*.test.mjs'
+          - '.clusterfuzzlite/**'
+
+# Reuses the label dependabot already created for its own action bumps, so CI
+# changes read the same whoever authored them.
+github_actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/labeler.yml'
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Dockerfile'
+          - 'Dockerfile.dockerignore'
+          - 'docker/**'
+
+# Prose only. Scoped to the docs that exist rather than a bare '**/*.md', so a
+# PR that ships code plus its README paragraph is not filed as documentation.
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'README.md'
+          - 'CHANGELOG.md'
+          - 'CONTRIBUTING.md'
+          - 'CODE_OF_CONDUCT.md'
+          - 'SECURITY.md'
+          - '.github/ISSUE_TEMPLATE/**'
+          - '.github/pull_request_template.md'
