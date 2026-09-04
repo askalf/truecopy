@@ -4,6 +4,11 @@
 # (badge.json drives the README badge; WATCH.md is the human report;
 # history.jsonl accumulates one line per run). A poisoned skill turns the run
 # red AND ships in the snapshot.
+#
+# Every flagged skill also gets its own `watch-triage` issue (support/watch-issues.mjs),
+# so a detector hit becomes a numbered work item that can be read, PR'd and closed
+# instead of a red run plus a line in a file on a non-default branch. Recording the
+# acceptance is what closes the issue; the next clean run does it automatically.
 name: marketplace-watch
 
 on:
@@ -20,6 +25,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write # push the snapshot to the watch branch
+      issues: write # open/close the per-skill triage issues
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,8 +82,17 @@ jobs:
           git commit -q -m "watch: $(date -u +%F) — $(cat "$RUNNER_TEMP/summary.json")"
           git push -q --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" watch
 
+      # Runs on BOTH outcomes on purpose: a clean scan is what closes the issues
+      # for skills that were triaged since the last run. Placed after the publish
+      # so an issue never points at a snapshot that failed to land — and before
+      # the fail below, which would otherwise end the job first.
+      - name: File / close the per-skill triage issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node support/watch-issues.mjs "$RUNNER_TEMP/out/results.json"
+
       - name: Fail the run if anything needs triage
         if: steps.scan.outputs.status != '0'
         run: |
-          echo "::error::marketplace watch flagged skills that need human triage — see the Under review section of WATCH.md on the watch branch"
+          echo "::error::marketplace watch flagged skills that need human triage — see the watch-triage issues, and the Under review section of WATCH.md on the watch branch"
           exit 1
