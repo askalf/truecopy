@@ -114,7 +114,13 @@ export function body(entry) {
     L.push('| flag | location | matched text |');
     L.push('| --- | --- | --- |');
     for (const e of entry.evidence) {
-      L.push(`| ${cell(e.flag)} | ${code(e.file)}:${e.line ?? '?'} | ${code(cell(e.text).slice(0, 160))} |`);
+      // Slice the RAW text and let code() escape it once. Escaping first and
+      // slicing after was wrong twice over: cell() is not idempotent, so the
+      // second pass turned `\|` into `\\\|` and printed a backslash that is not
+      // in the evidence; and a cut landing between the inserted backslash and
+      // the pipe it guards kept the backslash and dropped the pipe, silently
+      // altering the matched bytes a reviewer is reading.
+      L.push(`| ${cell(e.flag)} | ${code(e.file)}:${e.line ?? '?'} | ${code(String(e.text ?? '').slice(0, 160))} |`);
     }
     L.push('');
   }
@@ -182,16 +188,24 @@ gh([
   '--force',
 ]);
 
-// Tolerate the label not existing yet: on the very first run — and on any
-// DRY_RUN before the create above has ever been allowed through — the filter has
-// nothing to match, which is the same answer as "no issues are tracked".
+// This read is the ONLY thing standing between a re-flagged skill and a
+// duplicate issue, and the only thing that knows what to close. An empty answer
+// must therefore mean "nothing is tracked", never "the question failed": a
+// swallowed rate-limit would re-file an issue for every skill that already has
+// one AND skip every auto-close, on a job that runs daily.
+//
+// A real run has just created the label, so nothing here is tolerable — abort
+// before any mutation and let the next run try again. Under DRY_RUN the create
+// was held back, so the label may genuinely not exist yet; degrading is safe
+// there precisely because nothing downstream mutates.
 let open = [];
 try {
   open = JSON.parse(
     gh(['issue', 'list', '-R', repo, '--state', 'open', '--label', LABEL, '--limit', '200', '--json', 'number,title']),
   );
 } catch (e) {
-  console.log(`no existing ${LABEL} issues to read (${e.message.split('\n')[0]})`);
+  if (!DRY_RUN) throw e;
+  console.log(`dry-run: could not read ${LABEL} issues (${e.message.split('\n')[0]}) — assuming none tracked`);
 }
 const byTitle = new Map(open.map((i) => [i.title, i.number]));
 

