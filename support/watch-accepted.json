@@ -219,11 +219,11 @@
   "posthog:setting-up-a-data-warehouse-source": {
     "granularity": "finding-files",
     "files": {
-      "SKILL.md": "4f70e92ab1f3c357d4acf7ab083219fde2e4c7a34c6544331e0912baac698b35"
+      "SKILL.md": "3e8a7bbcc6a2d87e9447a3cb7a2c04a15b58a98c60ea317855a7b393b28cf513"
     },
     "class": "capability documentation",
-    "note": "re-read in full 2026-08-04 after upstream re-pin lapsed the 07-17 per-file accept (catalog now pins PostHog/ai-plugin@13dd2e24). Flag = SKILL.md:297 'Have them copy the signing secret from the source's webhook settings' inside the manual-webhook-registration fallback (Step 6, only reached when the API-driven create-webhook call comes back with a permissions error). The secret is stored back into PostHog's own system via external-data-sources-update-webhook-inputs-create — no exfil destination, same shape as the already-accepted convex:billing/resend:resend Stripe-signing-secret docs. Whole-file check: no external URLs, no send/upload verb paired with a destination anywhere in SKILL.md or references/sync-types.md.",
-    "reviewed": "2026-08-04"
+    "note": "Re-read in full 2026-09-05 after the catalog re-pinned PostHog/ai-plugin@13dd2e24 to @19e4737. The sole data-exfil flag remains SKILL.md:297, inside Step 6's manual webhook-registration fallback after PostHog's API cannot create the external Stripe webhook. It tells the user to copy that webhook's signing secret and provide it to PostHog's external-data-sources-update-webhook-inputs-create({id}, {inputs: {signing_secret}}), where the HogFunction uses it only to verify inbound payloads. This is credential setup in PostHog's own integration, not a transmission to an unrelated destination; the skill explicitly prefers a browser credential handoff and repeatedly prohibits collecting secrets in chat. Reviewed all 360 lines: no external URL, curl/fetch/upload command, encoded payload, or instruction to send credentials anywhere else. The prior per-file hash lapsed because the vendor changed bytes; the new finding-bearing-file SHA is recorded here.",
+    "reviewed": "2026-09-05"
   },
   "posthog:signals-scout-logs": {
     "granularity": "finding-files",
