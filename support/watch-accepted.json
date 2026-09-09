@@ -256,11 +256,11 @@
   "resend:resend": {
     "granularity": "finding-files",
     "files": {
-      "references/webhooks.md": "beb3541700535cc4a7816a5151af1678178b824fde5a3121c7777ce347dc1600"
+      "references/webhooks.md": "de7439b0e565f1e69f5cd8ab446123f7fa4deb62d2d13ca5ba07fd8109242729"
     },
     "class": "capability documentation",
-    "note": "Re-reviewed end to end at catalog pin 106dc343 after upstream re-pin lapsed the 2026-08-09 per-file acceptance. The prior flagged sentence remains a Resend-dashboard walkthrough: copy the webhook signing secret (whsec_) and store it locally as RESEND_WEBHOOK_SECRET; it contains no recipient, network command, or exfiltration destination. The only upstream delta since the prior pin 044372f is unrelated webhook delivery-history documentation (three SDK method rows, an events/attempts example, and a cross-reference); it does not change secret handling. references/logs.md is byte-identical to the prior pin; its $RESEND_API_KEY curl example authenticates to Resend's own api.resend.com endpoint, and remains an advisory rather than an attributable finding. The reviewed webhooks.md has Resend SDK/cURL examples that authenticate to Resend, signature-verification controls, and no instruction to transmit a local secret elsewhere. Per-file acceptance retains detection of future content changes and any new finding outside this file.",
-    "reviewed": "2026-09-05"
+    "note": "Re-reviewed at catalog pin 865a3686 after an upstream re-pin lapsed the 2026-09-05 per-file acceptance (issue #180). The flagged webhooks.md:246 line is unchanged Resend-dashboard prose: copy the signing secret (whsec_) from resend.com/webhooks and store it locally as RESEND_WEBHOOK_SECRET — no recipient, no network command, no destination. Diffed the full file against the previously reviewed pin 106dc343: the only delta is new webhook event-replay documentation (one SDK method row, a resend.webhooks.events.replay example, and a 422 note); secret handling is untouched, so the prior read carries. references/logs.md is byte-identical to both prior pins; its $RESEND_API_KEY curl authenticates to Resend's own api.resend.com and stays an advisory rather than an attributable finding. Per-file acceptance retains detection of future content changes and any new finding outside this file.",
+    "reviewed": "2026-09-09"
   },
   "sagemaker-ai:hyperpod-cluster-debugger": {
     "granularity": "finding-files",
