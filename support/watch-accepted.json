@@ -266,11 +266,11 @@
   "resend:resend": {
     "granularity": "finding-files",
     "files": {
-      "references/webhooks.md": "de7439b0e565f1e69f5cd8ab446123f7fa4deb62d2d13ca5ba07fd8109242729"
+      "references/webhooks.md": "d75ab86d4f06521a429c75692b485d23996a230a47707885d52511a637d30b66"
     },
     "class": "capability documentation",
-    "note": "Re-reviewed at catalog pin 865a3686 after an upstream re-pin lapsed the 2026-09-05 per-file acceptance (issue #180). The flagged webhooks.md:246 line is unchanged Resend-dashboard prose: copy the signing secret (whsec_) from resend.com/webhooks and store it locally as RESEND_WEBHOOK_SECRET — no recipient, no network command, no destination. Diffed the full file against the previously reviewed pin 106dc343: the only delta is new webhook event-replay documentation (one SDK method row, a resend.webhooks.events.replay example, and a 422 note); secret handling is untouched, so the prior read carries. references/logs.md is byte-identical to both prior pins; its $RESEND_API_KEY curl authenticates to Resend's own api.resend.com and stays an advisory rather than an attributable finding. Per-file acceptance retains detection of future content changes and any new finding outside this file.",
-    "reviewed": "2026-09-09"
+    "note": "Re-reviewed at catalog pin 2a9310fb after an upstream re-pin lapsed the 2026-09-09 per-file acceptance (issue #190) — same lapse shape as #180 and #171, third time for this skill. The flagged prose moved from webhooks.md:246 to :252 but is byte-identical: copy the signing secret (whsec_) from the resend.com/webhooks dashboard and store it locally as RESEND_WEBHOOK_SECRET — no recipient, no network command, no destination. Diffed the whole file against the previously reviewed pin 865a3686: the ONLY delta is new signing-secret ROTATION documentation (one SDK method row for rotateSigningSecret/rotate_signing_secret, a four-line example noting both secrets verify for 24h, and a gotcha correcting that signing_secret is now returned by create/get/rotate). That is a credential-hygiene feature — it tells the reader to rotate a leaked secret — and it neither reads nor transmits anything; the rotated value is only written back to the reader's own env var. Every URL in the file is an example.com/new-domain.com placeholder endpoint or api.resend.com itself. references/logs.md is byte-identical to both prior pins (46d6c9d7...); its $RESEND_API_KEY curl sends Authorization: Bearer to Resend's OWN api.resend.com and stays an advisory rather than an attributable finding. Per-file acceptance retains detection of future content changes and any new finding outside this file.",
+    "reviewed": "2026-09-14"
   },
   "sagemaker-ai:hyperpod-cluster-debugger": {
     "granularity": "finding-files",
