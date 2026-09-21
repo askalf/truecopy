@@ -126,6 +126,53 @@ for (const code of ['EACCES', 'EPERM']) {
   });
 }
 
+for (const code of ['EACCES', 'EPERM']) {
+  test(`an undeletable STALE guard (${code}) reports the denial instead of spinning`, () => {
+    // The permission layout the two tests above do NOT cover: a directory ACL
+    // that denies create and delete but still permits metadata reads. So
+    // open(wx) fails with ${code}, the stat SUCCEEDS with an mtime old enough
+    // to look stale, and the unlink that would reap it fails with ${code} too.
+    // The stale branch used to swallow that failure and `continue`
+    // unconditionally — past the deadline check AND past sleepSync(20) — so
+    // this layout spun at full speed forever. It must terminate and surface
+    // the access error.
+    const p = path.join(baseDir, `undeletable-${code}.lock`);
+    const realOpen = fs.openSync, realStat = fs.statSync, realUnlink = fs.unlinkSync;
+    const guard = `undeletable-${code}.lock.guard`;
+    const deny = (op, file) => {
+      const err = new Error(`${code}: permission denied, ${op} '${file}'`);
+      err.code = code;
+      throw err;
+    };
+    fs.openSync = function (file, flags, ...rest) {
+      if (String(file).endsWith(guard) && flags === 'wx') deny('open', file);
+      return realOpen.call(this, file, flags, ...rest);
+    };
+    // Readable metadata, and old enough to be past GUARD_STALE_MS (30s) so the
+    // reap branch is the one taken on every pass.
+    fs.statSync = function (file, ...rest) {
+      if (String(file).endsWith(guard)) return { mtimeMs: Date.now() - 300_000 };
+      return realStat.call(this, file, ...rest);
+    };
+    fs.unlinkSync = function (file, ...rest) {
+      if (String(file).endsWith(guard)) deny('unlink', file);
+      return realUnlink.call(this, file, ...rest);
+    };
+    try {
+      const started = Date.now();
+      assert.throws(
+        () => updateLock(p, (lock) => { lock.skills.a = { ok: true }; }, { waitMs: 300 }),
+        (e) => e.code === code && !/timed out waiting/.test(e.message),
+        'the unlink denial itself is the honest answer, not a phantom holder',
+      );
+      assert.ok(Date.now() - started < 10_000, 'gave up at the deadline rather than spinning');
+      assert.equal(fs.existsSync(p), false, 'nothing written to an inaccessible lock');
+    } finally {
+      fs.openSync = realOpen; fs.statSync = realStat; fs.unlinkSync = realUnlink;
+    }
+  });
+}
+
 test('a guard that keeps vanishing between open and stat still hits the deadline', () => {
   // The age === null path had the same unbounded shape as the denial above —
   // it `continue`d without ever consulting the deadline. A guard that loses
