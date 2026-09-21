@@ -152,8 +152,16 @@ function acquire(p, { waitMs = GUARD_WAIT_MS, staleMs = GUARD_STALE_MS } = {}) {
       } else if (age === null) {
         if (!timedOut) continue;                        // vanished between open and stat: retry
         throw timedOutError();
-      } else if (age > staleMs) { try { fs.unlinkSync(g); } catch {} continue; }
-      else if (timedOut) throw timedOutError();
+      } else if (age > staleMs) {
+        // Reaping a stale guard is the one path that can loop without ever
+        // sleeping, so it needs the same deadline as the others. A directory
+        // ACL can permit stat while denying unlink — a permanent denial then
+        // reads as "stale guard I keep failing to delete", and an
+        // unconditional `continue` would spin on it at full speed instead of
+        // eventually reporting the access error.
+        try { fs.unlinkSync(g); continue; }
+        catch (unlinkError) { if (timedOut) throw unlinkError; }
+      } else if (timedOut) throw timedOutError();
       sleepSync(20);
     }
   }
