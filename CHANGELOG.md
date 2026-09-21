@@ -6,6 +6,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Concurrent `add`s on Windows no longer fail with `EPERM` on the lock guard.** `open(wx)` on a guard that another process is unlinking at that instant returns `EPERM` on Windows (delete-pending), not `EEXIST`; `acquire()` treated it as fatal, so one of several simultaneous pins exited 1 while the lock itself was correct (CI run 35579991225, windows-latest). `EPERM` / `EACCES` / `EBUSY` from the guard open are now contention and retried like `EEXIST`. Because those two codes can also mean a permanent ACL denial, the retry window is bounded: a guard that can be neither created nor stat'ed is retried for `waitMs` and then reports the original `EACCES`/`EPERM` instead of looping forever. Regression tests inject each code, cover a persistent denial and a recovering stat, and hammer one guard from six processes.
+
 ## [0.10.3] - 2026-08-05
 
 ### Security

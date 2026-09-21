@@ -90,7 +90,38 @@ const GUARD_STALE_MS = 30_000;  // a guard older than this belonged to a process
 // would burn a core while a concurrent `add` does its work.
 const sleepSync = (ms) => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* fall through to a spin */ } };
 
-const guardAge = (g) => { try { return Date.now() - fs.statSync(g).mtimeMs; } catch { return null; } };
+// The guard's mtime, or `age: null` when it vanished between our open and this
+// stat (ENOENT — a raced-away guard, which simply means try again).
+//
+// Any OTHER stat failure is reported as `error` rather than swallowed. It used
+// to come back as null too, and that conflated two very different situations:
+// a guard that raced away, and a lock path we cannot reach AT ALL. An
+// inaccessible lock directory answers open(wx) with EACCES *and* stat with
+// EACCES, so the retry loop treated a permanent denial as contention and spun
+// on it forever — never pinning, never timing out, never saying "permission
+// denied". acquire() decides what to do with it.
+const guardAge = (g) => {
+  try { return { age: Date.now() - fs.statSync(g).mtimeMs }; }
+  catch (e) { return e && e.code === 'ENOENT' ? { age: null } : { error: e }; }
+};
+
+// "Someone else holds the guard" is EEXIST on every platform. On Windows it is
+// ALSO EPERM (and, on some filesystems, EACCES / EBUSY) for the few
+// microseconds a guard sits in the delete-pending state while its holder is
+// unlinking it: `open(wx)` collides with the unlink and comes back "not
+// permitted" instead of "exists". Measured on Windows 11 / Node 22: six
+// processes hammering one guard saw EPERM on ~1% of attempts. Treating only
+// EEXIST as contention made that 1% a hard failure — one of twelve concurrent
+// `truecopy add`s exited 1 on the windows-latest CI leg while the other eleven
+// pinned fine, and the lock was correct. The guard is not lost, it is
+// mid-release; the right move is the same as for EEXIST: wait and retry.
+//
+// EPERM and EACCES are genuinely ambiguous, though: the same two codes also
+// mean a permanent ACL or parent-directory denial. The retry loop below tells
+// them apart by OUTCOME rather than by code — a mid-release guard clears within
+// milliseconds, a denied path never does — so a permanent denial is bounded by
+// the same deadline as any other wait and then thrown.
+const GUARD_CONTENTION = new Set(['EEXIST', 'EPERM', 'EACCES', 'EBUSY']);
 
 /** Take the guard for `p`, or throw if someone else holds it too long.
  *  `wx` is create-if-absent in ONE syscall, which is what makes this a lock and
@@ -98,21 +129,39 @@ const guardAge = (g) => { try { return Date.now() - fs.statSync(g).mtimeMs; } ca
 function acquire(p, { waitMs = GUARD_WAIT_MS, staleMs = GUARD_STALE_MS } = {}) {
   const g = GUARD(p);
   const deadline = Date.now() + waitMs;
+  const timedOutError = () =>
+    new Error(`timed out waiting for another truecopy process to finish updating ${p} (holder: ${g}) — delete it if no truecopy is running`);
   for (;;) {
     try {
       const fd = fs.openSync(g, 'wx');
       try { fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); } finally { fs.closeSync(fd); }
       return g;
     } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
+      if (!GUARD_CONTENTION.has(e.code)) throw e;
       // A process that crashed mid-update would otherwise wedge the lock file
       // forever. Guards are held for milliseconds, so anything this old is dead.
-      const age = guardAge(g);
-      if (age === null) continue;                       // vanished between open and stat: retry
-      if (age > staleMs) { try { fs.unlinkSync(g); } catch {} continue; }
-      if (Date.now() > deadline) {
-        throw new Error(`timed out waiting for another truecopy process to finish updating ${p} (holder: ${g}) — delete it if no truecopy is running`);
-      }
+      const { age, error } = guardAge(g);
+      const timedOut = Date.now() > deadline;
+      if (error) {
+        // Not a guard we can see. Windows can fail the stat transiently on a
+        // delete-pending guard, so this still gets the normal retry window —
+        // but when the window closes, the access error itself is the honest
+        // answer, not a "another process is holding it" timeout and certainly
+        // not an endless loop.
+        if (timedOut) throw error;
+      } else if (age === null) {
+        if (!timedOut) continue;                        // vanished between open and stat: retry
+        throw timedOutError();
+      } else if (age > staleMs) {
+        // Reaping a stale guard is the one path that can loop without ever
+        // sleeping, so it needs the same deadline as the others. A directory
+        // ACL can permit stat while denying unlink — a permanent denial then
+        // reads as "stale guard I keep failing to delete", and an
+        // unconditional `continue` would spin on it at full speed instead of
+        // eventually reporting the access error.
+        try { fs.unlinkSync(g); continue; }
+        catch (unlinkError) { if (timedOut) throw unlinkError; }
+      } else if (timedOut) throw timedOutError();
       sleepSync(20);
     }
   }
