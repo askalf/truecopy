@@ -92,6 +92,18 @@ const sleepSync = (ms) => { try { Atomics.wait(new Int32Array(new SharedArrayBuf
 
 const guardAge = (g) => { try { return Date.now() - fs.statSync(g).mtimeMs; } catch { return null; } };
 
+// "Someone else holds the guard" is EEXIST on every platform. On Windows it is
+// ALSO EPERM (and, on some filesystems, EACCES / EBUSY) for the few
+// microseconds a guard sits in the delete-pending state while its holder is
+// unlinking it: `open(wx)` collides with the unlink and comes back "not
+// permitted" instead of "exists". Measured on Windows 11 / Node 22: six
+// processes hammering one guard saw EPERM on ~1% of attempts. Treating only
+// EEXIST as contention made that 1% a hard failure — one of twelve concurrent
+// `truecopy add`s exited 1 on the windows-latest CI leg while the other eleven
+// pinned fine, and the lock was correct. The guard is not lost, it is
+// mid-release; the right move is the same as for EEXIST: wait and retry.
+const GUARD_CONTENTION = new Set(['EEXIST', 'EPERM', 'EACCES', 'EBUSY']);
+
 /** Take the guard for `p`, or throw if someone else holds it too long.
  *  `wx` is create-if-absent in ONE syscall, which is what makes this a lock and
  *  not another race. */
@@ -104,7 +116,7 @@ function acquire(p, { waitMs = GUARD_WAIT_MS, staleMs = GUARD_STALE_MS } = {}) {
       try { fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); } finally { fs.closeSync(fd); }
       return g;
     } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
+      if (!GUARD_CONTENTION.has(e.code)) throw e;
       // A process that crashed mid-update would otherwise wedge the lock file
       // forever. Guards are held for milliseconds, so anything this old is dead.
       const age = guardAge(g);

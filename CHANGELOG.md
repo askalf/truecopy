@@ -6,6 +6,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Concurrent `add`s on Windows no longer fail with `EPERM` on the lock guard.** `open(wx)` on a guard that another process is unlinking at that instant returns `EPERM` on Windows (delete-pending), not `EEXIST`; `acquire()` treated it as fatal, so one of several simultaneous pins exited 1 while the lock itself was correct (CI run 35579991225, windows-latest). `EPERM` / `EACCES` / `EBUSY` from the guard open are now contention and retried like `EEXIST`. Regression test injects each code and hammers one guard from six processes.
+
 ## [0.10.3] - 2026-08-05
 
 ### Security
