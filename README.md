@@ -101,7 +101,7 @@ Scan mode, `--require-signed`, JSON reports and signing in CI with one secret: [
 
 ## The agent-security stack
 
-Three composable layers, one defense: **[redstamp](https://github.com/askalf/redstamp)** contains the call · **truecopy** vets the tool *(you are here)* · **[strongroom](https://github.com/askalf/strongroom)** holds the keys. Run all three together → **[agent-security-stack](https://github.com/askalf/agent-security-stack)**.
+Three composable layers, one defense: **[redstamp](https://github.com/askalf/redstamp)** contains the call · **truecopy** vets the tool *(you are here)* · **[plumbline](https://github.com/askalf/plumbline)** watches the whole trajectory.
 
 Related: **[plumbline](https://github.com/askalf/plumbline)** — own your agent *trajectory*: out-of-band, read-only monitoring of the whole action sequence against the declared job. A monitor **above** these three in-path layers — it scores what an agent did end to end, catching an escape assembled from individually-authorized steps. It never blocks an action.
 
