@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src=".github/readme/hero.jpg" alt="Own your agent skills. Vet, sign and pin before it runs. MCP servers, skills and marketplaces flow through scan, pin, verify and enforce into truecopy.lock, and a poisoned skill is stopped at scan." width="100%">
+
 # truecopy
 
 **Own your agent skills. Vet, sign, and pin every skill & MCP server before it runs.**
