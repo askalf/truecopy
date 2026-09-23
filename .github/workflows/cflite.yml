@@ -1,4 +1,4 @@
-# ClusterFuzzLite — continuous fuzzing of canon's trust-boundary parsers: the
+# ClusterFuzzLite — continuous fuzzing of truecopy's trust-boundary parsers: the
 # content hasher / canonical JSON, the MCP tool gate (prototype-name + duplicate
 # twin defenses), and the poison scanner's fail-closed verdict. Runs weekly + on
 # demand; a discovered crash fails the job and is uploaded as an artifact. Fuzz
@@ -16,6 +16,7 @@ permissions: read-all
 jobs:
   Fuzzing:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
