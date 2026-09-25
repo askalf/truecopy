@@ -94,12 +94,16 @@ jobs:
         run: |
           set -euo pipefail
           v=$(node -p "require('./package.json').version")
+          found=0
           for i in $(seq 1 12); do
-            if npm view "@askalf/truecopy@${v}" version >/dev/null 2>&1; then break; fi
-            [ "$i" -lt 12 ] || { echo "::error::@askalf/truecopy@${v} not on the registry after 120s"; exit 1; }
+            if npm view "@askalf/truecopy@${v}" version >/dev/null 2>&1; then found=1; break; fi
             echo "waiting for @askalf/truecopy@${v} to appear on the registry (${i}/12)…"
             sleep 10
           done
+          if [ "$found" -eq 0 ] && ! npm view "@askalf/truecopy@${v}" version >/dev/null 2>&1; then
+            echo "::error::@askalf/truecopy@${v} not on the registry after 120s"
+            exit 1
+          fi
           consumer="$RUNNER_TEMP/consumer"
           mkdir -p "$consumer"
           cp demo/poisoned-mcp.json "$consumer/"
