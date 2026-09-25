@@ -4,7 +4,7 @@
 
 ```bash
 npm i -g @askalf/truecopy                # latest, from npm
-npm i -g @askalf/truecopy@0.10.3         # pinned release
+npm i -g @askalf/truecopy@0.10.4         # pinned release
 ```
 
 > Also installable straight from GitHub: `npm i -g github:askalf/truecopy`. Every command below runs one-shot with `npx -y @askalf/truecopy` (or `npx -y github:askalf/truecopy`).

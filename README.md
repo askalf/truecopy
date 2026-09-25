@@ -72,7 +72,7 @@ Deterministic and offline. truecopy shares **[redstamp](https://github.com/askal
 
 truecopy has poison-scanned **68,560 skills**: the official Claude Code plugin directory plus nine community marketplaces ([2,019 skills, zero poisoned](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain)) and the entire ClawHub registry — the marketplace whose poisoning incident started the category ([66,541 skills, zero confirmed malicious](https://sprayberrylabs.com/blog/the-marketplace-that-started-the-panic)).
 
-And the audit never stopped: a standing watch re-scans the full official plugin directory **every day** and publishes each snapshot to [`WATCH.md`](https://github.com/askalf/truecopy/blob/watch/WATCH.md) and the **[live observatory → truecopy.sprayberrylabs.com](https://truecopy.sprayberrylabs.com)**. The 2026-09-22 run scanned **310 plugins · 2,400 skills**: **0 under review**, 468 advisories. Check your own installed plugin skills against exactly the bytes the watch vetted with `truecopy check-manifest`: [docs/watch.md](docs/watch.md).
+And the audit never stopped: a standing watch re-scans the full official plugin directory **every day** and publishes each snapshot to [`WATCH.md`](https://github.com/askalf/truecopy/blob/watch/WATCH.md) and the **[live observatory → truecopy.sprayberrylabs.com](https://truecopy.sprayberrylabs.com)**. The 2026-09-25 run scanned **314 plugins · 2,442 skills**: **0 under review**, 475 advisories. Check your own installed plugin skills against exactly the bytes the watch vetted with `truecopy check-manifest`: [docs/watch.md](docs/watch.md).
 
 ## What it gates
 
