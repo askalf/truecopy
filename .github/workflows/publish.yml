@@ -48,7 +48,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # Trusted publishing (OIDC) needs npm >=11.5.1; Node 24 bundles npm 11.
-          # ci.yml still tests the supported runtime floor (20, 22).
+          # ci.yml tests the supported runtimes (20, 22, 24).
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
@@ -94,11 +94,16 @@ jobs:
         run: |
           set -euo pipefail
           v=$(node -p "require('./package.json').version")
+          found=0
           for i in $(seq 1 12); do
-            if npm view "@askalf/truecopy@${v}" version >/dev/null 2>&1; then break; fi
+            if npm view "@askalf/truecopy@${v}" version >/dev/null 2>&1; then found=1; break; fi
             echo "waiting for @askalf/truecopy@${v} to appear on the registry (${i}/12)…"
             sleep 10
           done
+          if [ "$found" -eq 0 ] && ! npm view "@askalf/truecopy@${v}" version >/dev/null 2>&1; then
+            echo "::error::@askalf/truecopy@${v} not on the registry after 120s"
+            exit 1
+          fi
           consumer="$RUNNER_TEMP/consumer"
           mkdir -p "$consumer"
           cp demo/poisoned-mcp.json "$consumer/"
