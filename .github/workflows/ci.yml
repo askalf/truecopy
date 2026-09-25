@@ -72,17 +72,22 @@ jobs:
       - name: Pack and install into an empty project
         run: |
           set -euo pipefail
+          # Git Bash on Windows: work in /d/a/_temp form, not D:\a\_temp.
+          if command -v cygpath >/dev/null 2>&1; then RUNNER_TEMP="$(cygpath -u "$RUNNER_TEMP")"; fi
           consumer="$RUNNER_TEMP/consumer"
           mkdir -p "$consumer"
           tarball="$(npm pack --silent --pack-destination "$consumer")"
           echo "packed: ${tarball}"
-          tar -tzf "$consumer/$tarball" | sed 's/^/  /'
           cd "$consumer"
+          # Bare name, after the cd: GNU tar reads any `X:` prefix as host:path.
+          tar -tzf "$tarball" | sed 's/^/  /'
           npm init -y >/dev/null
           npm install --no-fund --no-audit "./${tarball}"
       - name: Drive the installed CLI, MCP server and library
         run: |
           set -euo pipefail
+          # Git Bash on Windows: work in /d/a/_temp form, not D:\a\_temp.
+          if command -v cygpath >/dev/null 2>&1; then RUNNER_TEMP="$(cygpath -u "$RUNNER_TEMP")"; fi
           bin="$RUNNER_TEMP/consumer/node_modules/.bin"
           want="$(node -p "require('./package.json').version")"
           got="$("$bin/truecopy" --version)"
