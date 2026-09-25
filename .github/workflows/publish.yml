@@ -84,3 +84,32 @@ jobs:
       - name: npm publish
         if: steps.gate.outputs.skip != 'true'
         run: npm publish --access public
+
+      # A green publish step proves npm accepted the upload, not that users can
+      # install it. Install the exact version back from the registry into an
+      # empty project, check it runs and reports that version, and let
+      # `npm audit signatures` check the registry signature and the provenance
+      # attestation OIDC publishing is supposed to attach.
+      - name: Verify the published package
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          CANON_NO_KEYCHAIN: '1'
+        run: |
+          set -euo pipefail
+          v=$(node -p "require('./package.json').version")
+          for i in $(seq 1 12); do
+            if npm view "@askalf/truecopy@${v}" version >/dev/null 2>&1; then break; fi
+            echo "waiting for @askalf/truecopy@${v} to appear on the registry (${i}/12)…"
+            sleep 10
+          done
+          consumer="$RUNNER_TEMP/consumer"
+          mkdir -p "$consumer"
+          cp demo/poisoned-mcp.json "$consumer/"
+          cd "$consumer"
+          npm init -y >/dev/null
+          npm install --no-fund --no-audit "@askalf/truecopy@${v}"
+          got="$(npx --no-install truecopy --version)"
+          [ "$got" = "$v" ] || { echo "::error::registry @askalf/truecopy@${v} reports version '$got'"; exit 1; }
+          status=0; npx --no-install truecopy scan poisoned-mcp.json || status=$?
+          [ "$status" -eq 1 ] || { echo "::error::published build did not flag the poisoned demo manifest (exit $status)"; exit 1; }
+          npm audit signatures
