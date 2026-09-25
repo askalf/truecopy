@@ -15,9 +15,6 @@ on:
   schedule:
     - cron: '17 6 * * *' # daily 06:17 UTC (staggered off the :00 grid)
   workflow_dispatch: {}
-  # Re-scan as soon as an acceptance or a detector change lands. Without this, a
-  # merged triage PR left the badge and WATCH.md red until the next daily run
-  # (2026-09-24: #207 merged 40 minutes after the run that flagged its skill).
   push:
     branches: [master]
     paths:
