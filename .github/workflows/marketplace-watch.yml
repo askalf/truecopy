@@ -15,9 +15,26 @@ on:
   schedule:
     - cron: '17 6 * * *' # daily 06:17 UTC (staggered off the :00 grid)
   workflow_dispatch: {}
+  push:
+    branches: [master]
+    paths:
+      - 'support/watch-accepted.json'
+      - 'support/marketplace-*.mjs'
+      - 'support/watch-issues.mjs'
+      - 'support/evidence.mjs'
+      - 'support/offset-map.mjs'
+      - 'src/**'
+      - 'package-lock.json' # a redstamp bump changes detection
+      - '.github/workflows/marketplace-watch.yml'
 
 permissions:
   contents: read
+
+# Every run force-pushes the watch branch and files/closes issues, so two must
+# never overlap. Queue instead of cancelling: a half-run watch publishes nothing.
+concurrency:
+  group: marketplace-watch
+  cancel-in-progress: false
 
 jobs:
   watch:

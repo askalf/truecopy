@@ -25,6 +25,14 @@ test('hook install: default command targets truecopy and is PINNED to this versi
   assert.doesNotMatch(cmd, /askalf\/canon/, 'no longer the legacy repo name');
 });
 
+test('--version / -v / version print the package version (exit 0), not usage', () => {
+  for (const flag of ['--version', '-v', 'version']) {
+    const r = cli([flag]);
+    assert.equal(r.status, 0, flag);
+    assert.equal(r.stdout.trim(), pkgVersion, flag);
+  }
+});
+
 test('hook claude --strict: an UNREADABLE stdin payload fails closed (exit 2); default allows (exit 0)', () => {
   const proj = tmp('hookp'); fs.mkdirSync(proj, { recursive: true });
   const env = { ...process.env, CLAUDE_PROJECT_DIR: proj };
