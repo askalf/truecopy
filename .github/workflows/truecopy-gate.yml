@@ -25,6 +25,6 @@ jobs:
         with:
           node-version: 20
       - name: truecopy verify
-        uses: askalf/truecopy-action@3983d2503f60cbca040f20f0be82347ce6f41f5e # v1.1.0
+        uses: askalf/truecopy-action@b2b1b9cf34bb37377878c3c8d59efd54bd030e0f # v1.1.1
         with:
           verify-attestation: 'true'
