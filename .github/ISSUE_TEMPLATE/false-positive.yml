@@ -48,6 +48,6 @@ body:
     id: version
     attributes:
       label: truecopy version
-      placeholder: '0.10.3 (`truecopy --version`)'
+      placeholder: '0.10.4 (`truecopy --version`)'
     validations:
       required: false
