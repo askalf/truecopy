@@ -31,7 +31,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [20, 22]
+        # 20 is the engines floor; 24 is the active LTS and what publish.yml runs.
+        node: [20, 22, 24]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,3 +43,102 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  # The test suite imports ./src straight from the checkout, so it cannot see a
+  # broken PUBLISHED package: a file left out of `files`, an import reaching
+  # outside src/, a bin that no longer resolves. This installs the tarball
+  # `npm pack` produces (the bytes npm publish would ship) into an empty project
+  # and drives it from there, on the engines floor.
+  package:
+    name: packed tarball (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      CANON_NO_KEYCHAIN: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+      - name: Pack and install into an empty project
+        run: |
+          set -euo pipefail
+          # Git Bash on Windows: work in /d/a/_temp form, not D:\a\_temp.
+          if command -v cygpath >/dev/null 2>&1; then RUNNER_TEMP="$(cygpath -u "$RUNNER_TEMP")"; fi
+          consumer="$RUNNER_TEMP/consumer"
+          mkdir -p "$consumer"
+          tarball="$(npm pack --silent --pack-destination "$consumer")"
+          echo "packed: ${tarball}"
+          cd "$consumer"
+          # Bare name, after the cd: GNU tar reads any `X:` prefix as host:path.
+          tar -tzf "$tarball" | sed 's/^/  /'
+          npm init -y >/dev/null
+          npm install --no-fund --no-audit "./${tarball}"
+      - name: Drive the installed CLI, MCP server and library
+        run: |
+          set -euo pipefail
+          # Git Bash on Windows: work in /d/a/_temp form, not D:\a\_temp.
+          if command -v cygpath >/dev/null 2>&1; then RUNNER_TEMP="$(cygpath -u "$RUNNER_TEMP")"; fi
+          bin="$RUNNER_TEMP/consumer/node_modules/.bin"
+          want="$(node -p "require('./package.json').version")"
+          got="$("$bin/truecopy" --version)"
+          [ "$got" = "$want" ] || { echo "::error::installed truecopy --version is '$got', package.json is '$want'"; exit 1; }
+
+          "$bin/truecopy" scan demo/clean-mcp.json
+          status=0; "$bin/truecopy" scan demo/poisoned-mcp.json || status=$?
+          [ "$status" -eq 1 ] || { echo "::error::the poisoned demo manifest must exit 1 from the packed CLI (got $status)"; exit 1; }
+          "$bin/truecopy" verify          # this repo's own lock, verified by the shipped build
+          "$bin/canon" --version          # legacy alias still resolves
+
+          # truecopy-mcp standalone: a real stdio handshake must list its own tools.
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | timeout 60 "$bin/truecopy-mcp" --lock truecopy.lock > "$RUNNER_TEMP/mcp.out" || true
+          node -e '
+            const msgs = require("fs").readFileSync(process.argv[1], "utf8").split("\n")
+              .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+            const list = msgs.find((m) => m.id === 2 && m.result && Array.isArray(m.result.tools));
+            if (!list) { console.error("packed truecopy-mcp answered no tools/list"); process.exit(1); }
+            console.log("truecopy-mcp tools:", list.result.tools.map((t) => t.name).join(", "));
+          ' "$RUNNER_TEMP/mcp.out"
+
+          # The library entry point resolves from the installed package, not ./src.
+          cd "$RUNNER_TEMP/consumer"
+          node --input-type=module -e '
+            const m = await import("@askalf/truecopy");
+            for (const fn of ["scan", "pin", "verify", "scanSkill"]) if (typeof m[fn] !== "function") { console.error("missing export: " + fn); process.exit(1); }
+            console.log(Object.keys(m).length + " exports");
+          '
+
+  # Lints every workflow (expression types, contexts, permissions, runner
+  # labels) and, through the shellcheck already on ubuntu-latest, every `run:`
+  # script. The binary is pinned by version AND its release sha256.
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          tgz="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tgz" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tgz}"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/$tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$tgz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
