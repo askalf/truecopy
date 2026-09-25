@@ -499,7 +499,6 @@ function runHook() {
   return 2;
 }
 
-// The issue templates ask reporters for `truecopy --version`, so it must print the version, not usage.
 if (cmd === '--version' || cmd === '-v' || cmd === 'version') { out(PKG_VERSION || 'unknown'); process.exit(0); }
 
 const table = { scan: runScan, add: runAdd, remove: runRemove, unpin: runRemove, verify: runVerify, diff: runDiff, list: runList, 'check-manifest': runCheckManifest, guard: runGuard, key: runKey, trust: runTrust, hook: runHook };

@@ -44,11 +44,6 @@ jobs:
       - run: npm ci
       - run: npm test
 
-  # The test suite imports ./src straight from the checkout, so it cannot see a
-  # broken PUBLISHED package: a file left out of `files`, an import reaching
-  # outside src/, a bin that no longer resolves. This installs the tarball
-  # `npm pack` produces (the bytes npm publish would ship) into an empty project
-  # and drives it from there, on the engines floor.
   package:
     name: packed tarball (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
