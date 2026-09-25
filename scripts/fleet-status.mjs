@@ -12,7 +12,7 @@
 //     not a verdict.
 //   - On code, the Second Read gates too: the newest of its reviews at the head that carries a
 //     `SECOND READ: READY` or `SECOND READ: NOT READY <dash> <reason>` line is its verdict (the
-//     posted line uses an em dash, U+2014; a hyphen or colon is accepted too).
+//     posted line uses U+2014; a hyphen or colon is accepted too).
 //
 // CLI (the workflow's only step):
 //   GITHUB_TOKEN=... REPO=owner/name PR=<number> node scripts/fleet-status.mjs [--dry-run]
