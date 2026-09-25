@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`truecopy --version` prints the version.** It fell through to the usage
+  text and exited 2, although the bug and false-positive issue templates ask
+  reporters for its output. `--version`, `-v` and `version` now print the
+  package version and exit 0.
+
 ## [0.10.4] - 2026-09-25
 
 ### Fixed

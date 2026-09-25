@@ -499,6 +499,8 @@ function runHook() {
   return 2;
 }
 
+if (cmd === '--version' || cmd === '-v' || cmd === 'version') { out(PKG_VERSION || 'unknown'); process.exit(0); }
+
 const table = { scan: runScan, add: runAdd, remove: runRemove, unpin: runRemove, verify: runVerify, diff: runDiff, list: runList, 'check-manifest': runCheckManifest, guard: runGuard, key: runKey, trust: runTrust, hook: runHook };
 if (!cmd || cmd === '-h' || cmd === '--help' || !table[cmd]) { usage(); process.exit(cmd && cmd !== '-h' && cmd !== '--help' ? 2 : 0); }
 try { process.exit(table[cmd]()); }
