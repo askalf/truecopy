@@ -10,7 +10,9 @@ const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 const version = JSON.parse(read('package.json')).version;
 
 test('CHANGELOG has a section for the package.json version', () => {
-  assert.match(read('CHANGELOG.md'), new RegExp(`^## \\[${version.replace(/\./g, '\\.')}\\] - \\d{4}-\\d{2}-\\d{2}$`, 'm'),
+  const released = read('CHANGELOG.md').split(/\r?\n/)
+    .map((l) => /^## \[([^\]]+)\] - \d{4}-\d{2}-\d{2}$/.exec(l)?.[1]).filter(Boolean);
+  assert.ok(released.includes(version),
     `add "## [${version}] - YYYY-MM-DD" to CHANGELOG.md — auto-release cuts the GitHub release notes from it`);
 });
 
