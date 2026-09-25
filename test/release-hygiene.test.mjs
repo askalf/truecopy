@@ -1,7 +1,3 @@
-// A release is cut by bumping package.json alone (auto-release.yml), so nothing
-// else would notice a bump that forgot its CHANGELOG section (the GitHub release
-// silently falls back to "Release vX") or left the documented pins on the old
-// version (users copy those lines verbatim).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
