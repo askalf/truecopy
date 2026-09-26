@@ -131,6 +131,13 @@ function acquire(p, { waitMs = GUARD_WAIT_MS, staleMs = GUARD_STALE_MS } = {}) {
   const deadline = Date.now() + waitMs;
   const timedOutError = () =>
     new Error(`timed out waiting for another truecopy process to finish updating ${p} (holder: ${g}) — delete it if no truecopy is running`);
+  // The "another process holds it" timeout is only honest if a guard was ever
+  // actually there: EEXIST from open, or a stat that found the file. A
+  // read-only lock directory answers open(wx) with EPERM/EACCES and stat with
+  // ENOENT on every pass, so no guard is ever seen; at the deadline the open
+  // error itself is the answer, not a holder the operator cannot find.
+  let guardSeen = false;
+  let lastOpenError = null;
   for (;;) {
     try {
       const fd = fs.openSync(g, 'wx');
@@ -138,9 +145,12 @@ function acquire(p, { waitMs = GUARD_WAIT_MS, staleMs = GUARD_STALE_MS } = {}) {
       return g;
     } catch (e) {
       if (!GUARD_CONTENTION.has(e.code)) throw e;
+      lastOpenError = e;
+      if (e.code === 'EEXIST') guardSeen = true;
       // A process that crashed mid-update would otherwise wedge the lock file
       // forever. Guards are held for milliseconds, so anything this old is dead.
       const { age, error } = guardAge(g);
+      if (age != null) guardSeen = true;
       const timedOut = Date.now() > deadline;
       if (error) {
         // Not a guard we can see. Windows can fail the stat transiently on a
@@ -150,8 +160,11 @@ function acquire(p, { waitMs = GUARD_WAIT_MS, staleMs = GUARD_STALE_MS } = {}) {
         // not an endless loop.
         if (timedOut) throw error;
       } else if (age === null) {
-        if (!timedOut) continue;                        // vanished between open and stat: retry
-        throw timedOutError();
+        // No guard at stat time: either it raced away (retry) or it never
+        // existed because the directory refuses the create. Both retry after
+        // the same sleep as any other wait; retrying without one busy-loops a
+        // full core for the whole window on a read-only directory.
+        if (timedOut) throw guardSeen ? timedOutError() : lastOpenError;
       } else if (age > staleMs) {
         // Reaping a stale guard is the one path that can loop without ever
         // sleeping, so it needs the same deadline as the others. A directory
