@@ -10,3 +10,6 @@ canon.lock
 # transient lock guard / temp files
 *.lock.guard
 *.lock.tmp-*
+# fuzz.yml / fuzz/run.mjs working dirs
+fuzz/corpus/
+fuzz/crashes/
