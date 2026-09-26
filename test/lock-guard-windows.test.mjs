@@ -173,6 +173,39 @@ for (const code of ['EACCES', 'EPERM']) {
   });
 }
 
+for (const code of ['EACCES', 'EPERM']) {
+  test(`a read-only lock directory (${code} on open, no guard to stat) waits politely and reports ${code}`, () => {
+    // The layout of a read-only directory: open(wx) is refused with ${code},
+    // and the stat that follows finds nothing (ENOENT) because the guard was
+    // never created. That path must sleep between attempts like every other
+    // wait, and at the deadline surface the refusal itself. No guard was ever
+    // seen, so "timed out waiting for another truecopy process" names a
+    // holder that does not exist.
+    const p = path.join(baseDir, `readonly-${code}.lock`);
+    const realOpen = fs.openSync;
+    let attempts = 0;
+    fs.openSync = function (file, flags, ...rest) {
+      if (String(file).endsWith(`readonly-${code}.lock.guard`) && flags === 'wx') {
+        attempts++;
+        const err = new Error(`${code}: permission denied, open '${file}'`); err.code = code; throw err;
+      }
+      return realOpen.call(this, file, flags, ...rest);
+    };
+    try {
+      assert.throws(
+        () => updateLock(p, (lock) => { lock.skills.a = { ok: true }; }, { waitMs: 300 }),
+        (e) => e.code === code && !/timed out waiting/.test(e.message),
+      );
+      // 300 ms at one attempt per 20 ms sleep is about 15. A loop that skips
+      // the sleep makes tens of thousands of attempts in the same window.
+      assert.ok(attempts < 100, `open(wx) attempted ${attempts} times in 300 ms: the retry loop is not sleeping`);
+      assert.equal(fs.existsSync(p), false, 'nothing written to an inaccessible lock');
+    } finally {
+      fs.openSync = realOpen;
+    }
+  });
+}
+
 test('a guard that keeps vanishing between open and stat still hits the deadline', () => {
   // The age === null path had the same unbounded shape as the denial above —
   // it `continue`d without ever consulting the deadline. A guard that loses
