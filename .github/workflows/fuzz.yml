@@ -35,6 +35,8 @@ concurrency:
 jobs:
   fuzz:
     name: Fuzz (Jazzer.js)
+    # Never from a fork: the schedule is inherited by every fork and means nothing there.
+    if: github.repository == 'askalf/truecopy'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
