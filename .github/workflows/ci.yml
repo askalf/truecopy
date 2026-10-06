@@ -20,9 +20,9 @@ concurrency:
 jobs:
   test:
     name: test (${{ matrix.os }}, ${{ matrix.node }})
-    # Linux entries of our own code run on truecopy-exec, the non-root one-job runners on our host
-    # (platform deploy/gha-runners), so GitHub's hosted queue going down does not hold them. A
-    # fork's PR, a Dependabot PR, and the Windows and macOS entries stay on GitHub's runners.
+    # Linux entries of our own code run on truecopy-exec, the non-root one-job runners on our
+    # host, so GitHub's hosted queue going down does not hold them. A fork's PR, a Dependabot
+    # PR, and the Windows and macOS entries stay on GitHub's runners.
     # The check name keeps matrix.os, so the required contexts are unchanged.
     runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event.pull_request && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && 'ubuntu-latest' || fromJSON('["self-hosted","truecopy-exec"]')) }}
     timeout-minutes: 15
@@ -49,9 +49,9 @@ jobs:
 
   package:
     name: packed tarball (${{ matrix.os }})
-    # Linux entries of our own code run on truecopy-exec, the non-root one-job runners on our host
-    # (platform deploy/gha-runners), so GitHub's hosted queue going down does not hold them. A
-    # fork's PR, a Dependabot PR, and the Windows and macOS entries stay on GitHub's runners.
+    # Linux entries of our own code run on truecopy-exec, the non-root one-job runners on our
+    # host, so GitHub's hosted queue going down does not hold them. A fork's PR, a Dependabot
+    # PR, and the Windows and macOS entries stay on GitHub's runners.
     # The check name keeps matrix.os, so the required contexts are unchanged.
     runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event.pull_request && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && 'ubuntu-latest' || fromJSON('["self-hosted","truecopy-exec"]')) }}
     timeout-minutes: 10
