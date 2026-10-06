@@ -28,7 +28,8 @@ jobs:
     # truecopy-exec, the non-root one-job runners on our host, so its trusted runs no longer
     # wait on GitHub's hosted queue. A fork's PR and a Dependabot PR run code nobody here
     # wrote, so they stay on GitHub's runners.
-    runs-on: ${{ github.event.pull_request && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && 'ubuntu-latest' || fromJSON('["self-hosted","truecopy-exec"]') }}
+    # A fork repository has no truecopy-exec runners, so every run there stays on GitHub's runners too.
+    runs-on: ${{ (github.repository != 'askalf/truecopy' || github.event.pull_request && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]')) && 'ubuntu-latest' || fromJSON('["self-hosted","truecopy-exec"]') }}
     timeout-minutes: 3
     permissions:
       contents: read
