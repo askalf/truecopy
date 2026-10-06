@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-26.04, windows-latest, macos-latest]
         node: [20, 22, 24]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,7 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-26.04, windows-latest]
     defaults:
       run:
         shell: bash
@@ -116,10 +116,10 @@ jobs:
           '
 
   # Lints every workflow (expression types, contexts, permissions, runner
-  # labels) and, through the shellcheck already on ubuntu-latest, every `run:`
+  # labels) and, through the shellcheck already on ubuntu-26.04, every `run:`
   # script. The binary is pinned by version AND its release sha256.
   actionlint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
