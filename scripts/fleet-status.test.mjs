@@ -16,6 +16,18 @@ import {
 } from './fleet-status.mjs';
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
+
+// The workflow's on: block, comments dropped, so a trigger named in a comment does not count.
+function onBlockOf(y) {
+  const m = /^on:(.*)$/m.exec(y);
+  if (!m) return '';
+  const lines = [m[1]];
+  for (const l of y.slice(m.index + m[0].length).split('\n').slice(1)) {
+    if (/^[^\s#]/.test(l)) break;
+    lines.push(l);
+  }
+  return lines.join('\n').replace(/#.*$/gm, '');
+}
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -501,6 +513,52 @@ console.log('\n  fleet-status.yml: which events run the job for a fork');
   check('every checkout is the default branch, never the PR head', checkouts.length > 0
     && checkouts.every((m) => /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/.test(m[1])));
   check('no step reads the PR head ref or sha', !/(pull_request\.head\.(ref|sha)|workflow_run\.head_sha)/.test(own));
+
+  // Our own code runs on truecopy-exec, our host's runners; code nobody here wrote never does. A
+  // runs-on expression sends a fork's PR and a Dependabot PR to GitHub's runners and everything
+  // else to ours. A literal truecopy-exec on a pull_request workflow needs a job if: that keeps forks off
+  // it or a job that never runs PR code (fleet-status, checked above).
+  const OWN_RE = /^\s+runs-on: \$\{\{ (.+) \}\}$/;
+  const exprs = [];
+  const literal = [];
+  for (const f of readdirSync(dir).filter((x) => /\.ya?ml$/.test(x))) {
+    const y = readFileSync(join(dir, f), 'utf8');
+    for (const line of y.split('\n')) {
+      const m = OWN_RE.exec(line);
+      if (m && m[1].includes('truecopy-exec')) exprs.push({ f, e: m[1] });
+      else if (/^\s+runs-on: \[self-hosted, truecopy-exec\]/.test(line)) literal.push(f);
+    }
+  }
+  check('the own-code runs-on expression is in use', exprs.length >= 5);
+  const ubuntu = { os: 'ubuntu-latest' };
+  const runner = (e, github, matrix = ubuntu) => {
+    for (const r of ['ubuntu-latest', 'windows-latest', 'macos-latest']) {
+      if (evalIf(`(${e}) == '${r}'`, { github: { repository: REPO, ...github }, matrix })) return r;
+    }
+    return 'ours';
+  };
+  const prFrom = (event_name, headRepo, login = 'askalf') =>
+    ({ event_name, event: { pull_request: { head: { repo: { full_name: headRepo } }, user: { login } } } });
+  for (const { f, e } of exprs) {
+    check(`${f}: a fork's pull_request runs on GitHub's runners`, runner(e, prFrom('pull_request', FORKED)) === 'ubuntu-latest');
+    check(`${f}: a fork's pull_request_review runs on GitHub's runners`, runner(e, prFrom('pull_request_review', FORKED)) === 'ubuntu-latest');
+    check(`${f}: a Dependabot PR runs on GitHub's runners`, runner(e, prFrom('pull_request', REPO, 'dependabot[bot]')) === 'ubuntu-latest');
+    check(`${f}: a same-repo PR runs on ours`, runner(e, prFrom('pull_request', REPO)) === 'ours');
+    check(`${f}: a push, schedule or dispatch runs on ours`,
+      ['push', 'schedule', 'workflow_dispatch'].every((ev) => runner(e, { event_name: ev, event: {} }) === 'ours'));
+    check(`${f}: the expression names exactly our label`, e.includes(`fromJSON('["self-hosted","truecopy-exec"]')`));
+    if (e.includes('matrix.os')) {
+      check(`${f}: Windows and macOS entries stay on GitHub's runners`,
+        runner(e, prFrom('pull_request', REPO), { os: 'windows-latest' }) === 'windows-latest'
+        && runner(e, { event_name: 'push', event: {} }, { os: 'macos-latest' }) === 'macos-latest');
+    }
+  }
+  for (const f of literal) {
+    const y = readFileSync(join(dir, f), 'utf8');
+    const prTriggered = /\bpull_request(_target|_review)?\b/.test(onBlockOf(y));
+    check(`${f}: a literal truecopy-exec is on a workflow no fork can run, or keeps forks off it`,
+      !prTriggered || f === 'fleet-status.yml' || /head\.repo\.full_name == github\.repository/.test(y));
+  }
 
   let relay = '';
   try { relay = readFileSync(join(dir, 'fleet-review-relay.yml'), 'utf8'); } catch { /* checked below */ }

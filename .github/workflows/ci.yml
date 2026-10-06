@@ -20,7 +20,11 @@ concurrency:
 jobs:
   test:
     name: test (${{ matrix.os }}, ${{ matrix.node }})
-    runs-on: ${{ matrix.os }}
+    # Linux entries of our own code run on truecopy-exec, the non-root one-job runners on our
+    # host, so GitHub's hosted queue going down does not hold them. A fork's PR, a Dependabot
+    # PR, and the Windows and macOS entries stay on GitHub's runners.
+    # The check name keeps matrix.os, so the required contexts are unchanged.
+    runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event.pull_request && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && 'ubuntu-latest' || fromJSON('["self-hosted","truecopy-exec"]')) }}
     timeout-minutes: 15
     # Signing tests must never reach the runner's real OS keychain (macOS
     # `security`, Linux secret-tool). keychain.test.mjs manages this per-test via
@@ -45,7 +49,11 @@ jobs:
 
   package:
     name: packed tarball (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    # Linux entries of our own code run on truecopy-exec, the non-root one-job runners on our
+    # host, so GitHub's hosted queue going down does not hold them. A fork's PR, a Dependabot
+    # PR, and the Windows and macOS entries stay on GitHub's runners.
+    # The check name keeps matrix.os, so the required contexts are unchanged.
+    runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event.pull_request && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]') && 'ubuntu-latest' || fromJSON('["self-hosted","truecopy-exec"]')) }}
     timeout-minutes: 10
     env:
       CANON_NO_KEYCHAIN: '1'

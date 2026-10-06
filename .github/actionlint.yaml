@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels:
+    # non-root ephemeral exec runner for our own code
+    - truecopy-exec
