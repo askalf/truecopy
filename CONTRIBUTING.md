@@ -36,8 +36,12 @@ npm test      # run the full test suite
 
 Every PR must pass these checks to merge:
 
-- `test` on **ubuntu**, **windows**, and **macos** × Node **20** and **22**
+- `test` on **ubuntu** × Node **20** and **22**
 - **CodeQL** static analysis (`analyze (javascript-typescript)`)
+
+`test` also runs on ubuntu with Node 24 and on **windows** with Node 22. Those two are not
+required: Windows runs on GitHub's runners, and a hosted outage should not hold a merge. A red
+Windows run still needs fixing before a release.
 
 OpenSSF Scorecard and ClusterFuzzLite fuzzing also run on the repo; a discovered
 crash or a new high-severity finding will block the change.
