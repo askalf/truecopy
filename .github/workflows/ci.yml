@@ -22,8 +22,12 @@ jobs:
     name: test (${{ matrix.os }}, ${{ matrix.node }})
     # Linux entries of our own code run on truecopy-exec, the non-root one-job runners on our
     # host, so GitHub's hosted queue going down does not hold them. A fork's PR, a Dependabot
-    # PR, and the Windows and macOS entries stay on GitHub's runners.
-    # The check name keeps matrix.os, so the required contexts are unchanged.
+    # PR, and the Windows entry stay on GitHub's runners.
+    # The Windows entry is the only place the Windows-only behaviour runs (a lock guard read as
+    # EPERM mid-release, Git Bash paths). It is not a required check, so a hosted outage or
+    # billing block never holds a merge on it, and one Node version covers it: that behaviour
+    # does not vary by Node version. There is no macOS entry: with CANON_NO_KEYCHAIN set and
+    # the keychain tests on a fake, macOS runs nothing Linux does not.
     # A fork repository has no truecopy-exec runners, so every run there stays on GitHub's runners too.
     runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || ((github.repository != 'askalf/truecopy' || github.event.pull_request && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]')) && 'ubuntu-latest' || fromJSON('["self-hosted","truecopy-exec"]')) }}
     timeout-minutes: 15
@@ -35,8 +39,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest]
         node: [20, 22, 24]
+        include:
+          - os: windows-latest
+            node: 22
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
