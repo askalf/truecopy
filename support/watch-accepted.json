@@ -282,11 +282,11 @@
     "granularity": "finding-files",
     "files": {
       "SKILL.md": "5b2f407ff40639727310236f4b34986cacd4bf616c07d2e4198846726842e346",
-      "scripts/mine-transcripts.mjs": "95318067a645b5f0019c57e370f06747e9ea390591f1546418b2762679b10dd2"
+      "scripts/mine-transcripts.mjs": "0753c2cd05db1cabbbbfc5a9f5aff09e672df74eeb9d0ce4cb9485bb8408ac08"
     },
     "class": "defensive quoting",
-    "note": "Anthropic in-repo usage-report plugin: mines ~/.claude/projects transcripts LOCALLY (miner has zero network primitives, execFileSync=git only, hand-verified) and quotes 'ignore previous instructions' in its names-are-data defense; sensitive path = its own documented data source",
-    "reviewed": "2026-07-17"
+    "note": "Anthropic in-repo usage-report plugin: mines ~/.claude/projects transcripts LOCALLY (miner has zero network primitives, execFileSync=git only, hand-verified) and quotes 'ignore previous instructions' in its names-are-data defense; sensitive path = its own documented data source. Re-reviewed 2026-10-09 (#261) at claude-plugins-official@b860d6f: SKILL.md byte-identical to the July accept (L142 is still the Project-names-are-data defense quoting the attack to refuse it); mine-transcripts.mjs changed only by upstream 4da1090+0baf7d1 (query every local clone per project, union commits by sha, report git-unavailable only when a clone errored and none found commits) - read the full diff: imports still fs/path/os/child_process only, execFileSync still git-only (rev-parse/log/config), no network primitive added",
+    "reviewed": "2026-10-09"
   },
   "resend:resend": {
     "granularity": "finding-files",
