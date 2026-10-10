@@ -31,10 +31,11 @@ permissions:
   contents: read
   pull-requests: read
 
-# Queued, not cancelled: forge dispatches one run per review, and a cancelled run leaves no
-# artifact for it to read.
+# Grouped by PR and head: forge dispatches one run per review, and each review has its own head
+# sha, so no two outstanding runs ever share a group. GitHub only cancels a pending run when a
+# second dispatch lands in the same group, which this scoping makes impossible.
 concurrency:
-  group: fix-${{ github.repository }}-${{ inputs.pr }}
+  group: fix-${{ github.repository }}-${{ inputs.pr }}-${{ inputs.head }}
   cancel-in-progress: false
 
 jobs:
