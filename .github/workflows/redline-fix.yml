@@ -31,11 +31,13 @@ permissions:
   contents: read
   pull-requests: read
 
-# Grouped by PR and head: forge dispatches one run per review, and each review has its own head
-# sha, so no two outstanding runs ever share a group. GitHub only cancels a pending run when a
-# second dispatch lands in the same group, which this scoping makes impossible.
+# One group per review: GitHub keeps a single pending run per concurrency group and a newer
+# dispatch replaces it, so a group shared across a PR's reviews could drop a review's run before
+# it uploads the artifact forge reads. Runs for different reviews may overlap; each only reads
+# the PR and uploads its own artifact, and one whose head the PR has moved past fails on its own.
+# A repeat dispatch of the same review queues behind the first.
 concurrency:
-  group: fix-${{ github.repository }}-${{ inputs.pr }}-${{ inputs.head }}
+  group: fix-${{ github.repository }}-${{ inputs.pr }}-${{ inputs.review }}
   cancel-in-progress: false
 
 jobs:
