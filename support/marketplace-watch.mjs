@@ -425,7 +425,7 @@ write('results.json', JSON.stringify({
 const md = [];
 md.push('# truecopy marketplace watch');
 md.push('');
-md.push(`> The official Claude Code plugin directory ([anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official)) — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — re-scanned on a schedule by [truecopy](https://github.com/askalf/truecopy). Latest snapshot — history in [history.jsonl](./history.jsonl), methodology in [the 2,019-skill study](https://sprayberrylabs.com/blog/auditing-the-skills-supply-chain).`);
+md.push(`> The official Claude Code plugin directory ([anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official)) — every catalog plugin, including the external vendor plugins fetched at their catalog-pinned SHAs — re-scanned on a schedule by [truecopy](https://github.com/askalf/truecopy). Latest snapshot — history in [history.jsonl](./history.jsonl).`);
 md.push('');
 md.push(`**${scannedAt.slice(0, 10)}** — ${fetchErrors.length ? `**${pluginsScanned}** of **${plugins}**` : `**${plugins}**`} plugins · **${skills.length}** skills scanned · **${poisoned}** under review · **${advisoryCount}** advisories${fetchErrors.length ? ` · **${fetchErrors.length}** unfetched (see below)` : ''}`);
 md.push('');
