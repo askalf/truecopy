@@ -4,7 +4,7 @@
 // loads no external fonts, scripts or stylesheets. So every SVG here embeds
 // the brand face (Space Mono, SIL OFL, Latin subset under ./fonts) as base64
 // and pins monospace runs with textLength so alignment survives a fallback
-// font. Zero dependencies, on purpose: the package has none either.
+// font. Node's standard library only: nothing here is installed or shipped.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

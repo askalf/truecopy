@@ -1,31 +1,23 @@
 #!/usr/bin/env node
 // Every relative link, image and anchor in the README and docs/ must resolve.
 //
-// Ported from askalf/dario. Links drift: a doc gets renamed, a heading gets
-// reworded, and the README keeps pointing at the old name. The reader gets a
-// 404 or a page that scrolls to the top, and nobody notices because nobody
-// clicks every link on every PR. This does, on every PR.
-//
 // Checks, with no network access:
-//   - relative file targets exist (links, <img src>, <picture><source srcset>)
+//   - relative file targets exist (links, <a href>, <img src>, and every
+//     candidate URL in a <source srcset> or <img srcset>, without its descriptor)
 //   - #fragments resolve to a heading (GitHub's slug rules) or an explicit
 //     <a id="…"> / <a name="…"> in the target file, README included
-//   - mailto: / http(s): targets are left alone (external reachability is not
-//     a property of this repo)
+//   - mailto: / http(s): / data: targets are left alone (external reachability
+//     is not a property of this repo)
 //
 // Usage: node scripts/check-readme-links.mjs [file.md ...]   (default: README.md + docs/*.md)
+// test/readme-links.test.mjs drives the exported functions against fixtures.
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-
-const files = process.argv.slice(2).length
-  ? process.argv.slice(2)
-  : ['README.md', ...readdirSync('docs').filter((f) => f.endsWith('.md')).sort().map((f) => join('docs', f))];
-let failures = 0;
-const fail = (msg) => { failures++; console.error(`FAIL: ${msg}`); };
+import { fileURLToPath } from 'node:url';
 
 /** GitHub-style heading slug: lowercase, drop punctuation, spaces → hyphens; duplicates get -1, -2 … */
-function slugify(text) {
+export function slugify(text) {
   // Inline HTML in a heading (<kbd>, <code>…) does not reach the slug, so drop
   // the tags. Looping until nothing changes handles nested/split tags; this is
   // slug derivation for comparison, not sanitization of anything rendered.
@@ -38,7 +30,9 @@ function slugify(text) {
     .trim()
     .replace(/\s/g, '-');
 }
-function anchorsOf(path) {
+
+/** Every heading slug and explicit <a id|name> in a markdown file. */
+export function anchorsOf(path) {
   const src = readFileSync(path, 'utf8');
   const seen = new Map(); const out = new Set();
   let inFence = false;
@@ -56,12 +50,29 @@ function anchorsOf(path) {
   return out;
 }
 
-const anchorCache = new Map();
-const anchors = (p) => { if (!anchorCache.has(p)) anchorCache.set(p, anchorsOf(p)); return anchorCache.get(p); };
+/**
+ * The candidate URLs of a srcset value, descriptors dropped: "a.png 1x, b.png 2x"
+ * gives [a.png, b.png]. Follows the HTML parsing rule: a URL runs to the next
+ * whitespace and loses any trailing commas, and its descriptors run to the next
+ * comma. So a comma inside a URL ("a,b.png 1x") stays part of it.
+ */
+export function srcsetUrls(value) {
+  const out = [];
+  let rest = value;
+  for (;;) {
+    rest = rest.replace(/^[\s,]+/, '');
+    if (!rest) return out;
+    const url = rest.match(/^\S+/)[0];
+    rest = rest.slice(url.length);
+    if (url.endsWith(',')) { out.push(url.replace(/,+$/, '')); continue; }
+    out.push(url);
+    const comma = rest.indexOf(',');
+    rest = comma < 0 ? '' : rest.slice(comma + 1);
+  }
+}
 
-for (const file of files) {
-  const src = readFileSync(file, 'utf8');
-  const base = dirname(resolve(file));
+/** Every link target in markdown text, with its 1-based line. Fenced code is skipped. */
+export function targetsOf(src) {
   const targets = [];
   let inFence = false;
   src.split('\n').forEach((line, i) => {
@@ -73,26 +84,52 @@ for (const file of files) {
     // [text][label] / ![alt][label] use, so checking the definition covers them.
     // A footnote definition ([^label]: prose) is not a link.
     for (const m of line.matchAll(/^\s{0,3}\[(?!\^)[^\]]+\]:\s*<?([^\s>]+)>?(?:\s+.*)?$/g)) targets.push({ t: m[1], line: i + 1 });
-    // raw html: <a href>, <img src>, <source srcset>
-    for (const m of line.matchAll(/\b(?:href|src|srcset)="([^"]+)"/g)) targets.push({ t: m[1], line: i + 1 });
+    // raw html: <a href>, <img src> hold one URL each
+    for (const m of line.matchAll(/\b(?:href|src)="([^"]+)"/g)) targets.push({ t: m[1], line: i + 1 });
+    // <source srcset>, <img srcset> hold a list of "URL descriptor" candidates
+    for (const m of line.matchAll(/\bsrcset="([^"]+)"/g)) for (const t of srcsetUrls(m[1])) targets.push({ t, line: i + 1 });
   });
+  return targets;
+}
+
+/** Check one markdown file. Returns how many relative targets it checked and a message per broken one. */
+export function checkFile(file, anchors = anchorsOf) {
+  const base = dirname(resolve(file));
+  const failures = [];
   let checked = 0;
-  for (const { t, line } of targets) {
+  for (const { t, line } of targetsOf(readFileSync(file, 'utf8'))) {
     if (/^(https?:|mailto:|data:)/i.test(t)) continue;
     checked++;
     const [pathPart, frag] = t.split('#');
     let target = file;
     if (pathPart) {
       const p = resolve(base, decodeURIComponent(pathPart));
-      if (!existsSync(p)) { fail(`${file}:${line} → ${t} (file not found)`); continue; }
-      if (statSync(p).isDirectory()) { if (frag) fail(`${file}:${line} → ${t} (fragment on a directory)`); continue; }
+      if (!existsSync(p)) { failures.push(`${file}:${line} → ${t} (file not found)`); continue; }
+      if (statSync(p).isDirectory()) { if (frag) failures.push(`${file}:${line} → ${t} (fragment on a directory)`); continue; }
       target = p;
     }
     if (frag !== undefined) {
-      if (!/\.md$/i.test(target)) { fail(`${file}:${line} → ${t} (fragment on a non-markdown file)`); continue; }
-      if (!anchors(target).has(frag)) fail(`${file}:${line} → ${t} (no heading or anchor "#${frag}" in ${target === file ? 'this file' : pathPart})`);
+      if (!/\.md$/i.test(target)) { failures.push(`${file}:${line} → ${t} (fragment on a non-markdown file)`); continue; }
+      if (!anchors(target).has(frag)) failures.push(`${file}:${line} → ${t} (no heading or anchor "#${frag}" in ${target === file ? 'this file' : pathPart})`);
     }
   }
-  console.log(`${failures ? 'checked' : 'ok '} ${file}: ${checked} relative link${checked === 1 ? '' : 's'}/anchors checked`);
+  return { checked, failures };
 }
-process.exit(failures ? 1 : 0);
+
+// Run as a script, not imported. realpath on both sides: argv[1] keeps a symlinked or
+// short (8.3) path as typed, import.meta.url is the resolved one.
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  const files = process.argv.slice(2).length
+    ? process.argv.slice(2)
+    : ['README.md', ...readdirSync('docs').filter((f) => f.endsWith('.md')).sort().map((f) => join('docs', f))];
+  const cache = new Map();
+  const anchors = (p) => { if (!cache.has(p)) cache.set(p, anchorsOf(p)); return cache.get(p); };
+  let failures = 0;
+  for (const file of files) {
+    const r = checkFile(file, anchors);
+    for (const msg of r.failures) console.error(`FAIL: ${msg}`);
+    failures += r.failures.length;
+    console.log(`${failures ? 'checked' : 'ok '} ${file}: ${r.checked} relative link${r.checked === 1 ? '' : 's'}/anchors checked`);
+  }
+  process.exit(failures ? 1 : 0);
+}
