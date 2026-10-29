@@ -176,8 +176,49 @@ test('slugify: follows GitHub on underscores, code, emphasis and punctuation', (
     ["What's new? (v2.0)", 'whats-new-v20'],
     ['Two  spaces', 'two--spaces'],
     ['A & B', 'a--b'],
+    ['Use `<file>`', 'use-file'],
+    ['Pass `[a](b)` here', 'pass-ab-here'],
+    ['Use ` x ` mode', 'use-x-mode'],
+    ['[`run`](https://example.com) it', 'run-it'],
+    ['See <https://example.com>', 'see-httpsexamplecom'],
+    ['Note <!-- hidden --> this', 'note--this'],
   ];
   for (const [heading, slug] of cases) assert.equal(slugify(heading), slug, heading);
+});
+
+test('targetsOf: a backtick run with no closer of its length is literal', () => {
+  // `` opens nothing here (no later run of exactly two), so the link renders.
+  // A run never starts mid-run: the second backtick of `` cannot pair with `.
+  assert.deepEqual(targetsOf('`` [bad](missing.md) `\n').map((x) => x.t), ['missing.md']);
+  assert.deepEqual(targetsOf('`` a ` [hid](x.md) `` [b](b.md)\n').map((x) => x.t), ['b.md']);
+  assert.deepEqual(targetsOf('\\`[c](c.md)\\` and \\``[d](d.md)`\n').map((x) => x.t), ['c.md']);
+});
+
+test('checkFile: a link hidden by mismatched backticks is still checked', (t) => {
+  const file = fixture(t, '`` [bad](missing.md) `\n');
+  assert.deepEqual(checkFile(file).failures.map((m) => m.replace(/^.*:\d+ → /, '')), ['missing.md (file not found)']);
+});
+
+test('checkFile: a repeated slug skips suffixes already taken', (t) => {
+  const file = fixture(t, [
+    '# Setup',
+    '# Setup',
+    '# Setup-1',
+    '# Setup',
+    '',
+    '[a](#setup) [b](#setup-1) [c](#setup-1-1) [d](#setup-2) [e](#setup-3)',
+    '',
+  ].join('\n'));
+  assert.deepEqual(checkFile(file).failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    '#setup-3 (no heading or anchor "#setup-3" in this file)',
+  ]);
+});
+
+test('checkFile: a heading with angle brackets in code links by its code text', (t) => {
+  const file = fixture(t, '## Use `<file>`\n\n[a](#use-file) [b](#use-)\n');
+  assert.deepEqual(checkFile(file).failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    '#use- (no heading or anchor "#use-" in this file)',
+  ]);
 });
 
 test('checkFile: links to headings with literal underscores resolve', (t) => {

@@ -12,7 +12,8 @@
 // Only rendered text counts: a link or <a id> inside fenced code or an inline
 // code span is an example, not a link or an anchor. It reads markdown line by
 // line, not with a parser, so indented code blocks, HTML comments and code
-// spans that cross a line break are read as rendered text.
+// spans that cross a line break are read as rendered text, and only # headings
+// are headings: a link to an underlined (=== or ---) heading fails.
 //
 // Usage: node scripts/check-readme-links.mjs [file.md ...]   (default: README.md + docs/*.md)
 // test/readme-links.test.mjs drives the exported functions against fixtures.
@@ -21,13 +22,52 @@ import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'n
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** An inline code span: a run of N backticks closes at the next run of exactly N. Group 2 is the code. */
-const CODE_SPAN = /(`+)(?!`)(.*?)(?<!`)\1(?!`)/g;
+/**
+ * The inline code spans in one line, found the CommonMark way: a whole run of N
+ * backticks opens a span that the next run of exactly N closes, and a run with
+ * no closer is literal text. Outside code a backslash escapes the character
+ * after it; inside code it does not. The code is the text between the runs, one
+ * space trimmed from each end when both ends have one and it is not all spaces.
+ */
+function codeSpans(line) {
+  const spans = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === '\\') { i += 2; continue; }
+    if (line[i] !== '`') { i++; continue; }
+    let j = i;
+    while (line[j] === '`') j++;
+    const n = j - i;
+    let close = -1;
+    for (let k = j; k < line.length; ) {
+      if (line[k] !== '`') { k++; continue; }
+      let e = k;
+      while (line[e] === '`') e++;
+      if (e - k === n) { close = k; break; }
+      k = e;
+    }
+    if (close < 0) { i = j; continue; }
+    let code = line.slice(j, close);
+    if (code.startsWith(' ') && code.endsWith(' ') && /[^ ]/.test(code)) code = code.slice(1, -1);
+    spans.push({ start: i, end: close + n, code });
+    i = close + n;
+  }
+  return spans;
+}
 
 /** The line with its inline code spans removed. */
 function withoutCodeSpans(line) {
-  return line.replace(CODE_SPAN, '');
+  let out = '';
+  let last = 0;
+  for (const s of codeSpans(line)) { out += line.slice(last, s.start); last = s.end; }
+  return out + line.slice(last);
 }
+
+/**
+ * An HTML tag or comment. A tag name is followed by whitespace, / or >, so an
+ * autolink such as <https://example.com> is not a tag: GitHub shows its text.
+ */
+const HTML_TAG = /<\/?[A-Za-z][A-Za-z0-9-]*(?=[\s/>])[^<>]*>|<!--[\s\S]*?-->/g;
 
 /**
  * Text with underscore emphasis dropped: _a_ and __a__ open after a non-word
@@ -43,27 +83,33 @@ function withoutUnderscoreEmphasis(text) {
 }
 
 /**
- * GitHub's heading slug. The text first goes the way GitHub renders it: tags
- * dropped, links and images to their text, code spans to their literal content,
- * underscore emphasis dropped. Then GitHub's slugger: lowercase, every character
- * but a letter, mark, number, space, hyphen or underscore removed, each space to
- * a hyphen, no trim after (so "🚀 Launch" is "-launch"). Duplicates get -1, -2 …
- * in anchorsOf.
+ * GitHub's heading slug. The text first goes the way GitHub renders it: code
+ * spans found first and kept as their literal content, then, outside code, tags
+ * dropped, links and images to their text, underscore emphasis dropped. Then
+ * GitHub's slugger: lowercase, every character but a letter, mark, number,
+ * space, hyphen or underscore removed, each space to a hyphen, no trim after
+ * (so "🚀 Launch" is "-launch"). anchorsOf gives duplicates their suffixes.
  */
 export function slugify(text) {
+  // Each code span is parked as one private-use character while the text around
+  // it is rendered, then put back. The slugger drops private-use characters, so
+  // removing any already in the text changes no slug.
+  const s = text.trim().replace(/[-]/g, '');
+  const code = [];
+  let r = '';
+  let last = 0;
+  for (const span of codeSpans(s)) {
+    r += s.slice(last, span.start) + String.fromCharCode(0xE000 + code.length);
+    code.push(span.code);
+    last = span.end;
+  }
+  r += s.slice(last);
   // Looping until nothing changes handles nested/split tags; this is slug
   // derivation for comparison, not sanitization of anything rendered.
-  let s = text.trim();
-  for (let prev = null; prev !== s; ) { prev = s; s = s.replace(/<[^>]*>/g, ''); }
-  s = s.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1');
-  let rendered = '';
-  let last = 0;
-  for (const m of s.matchAll(CODE_SPAN)) {
-    rendered += withoutUnderscoreEmphasis(s.slice(last, m.index)) + m[2];
-    last = m.index + m[0].length;
-  }
-  rendered += withoutUnderscoreEmphasis(s.slice(last));
-  return rendered.toLowerCase().replace(/[^\p{L}\p{M}\p{N} _-]/gu, '').replace(/ /g, '-');
+  for (let prev = null; prev !== r; ) { prev = r; r = r.replace(HTML_TAG, ''); }
+  r = withoutUnderscoreEmphasis(r.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1'));
+  r = r.replace(/[-]/g, (c) => code[c.charCodeAt(0) - 0xE000]);
+  return r.toLowerCase().replace(/[^\p{L}\p{M}\p{N} _-]/gu, '').replace(/ /g, '-');
 }
 
 /** Percent-decoded text, or null when an escape is malformed. */
@@ -94,15 +140,21 @@ export function proseLines(src) {
   return out;
 }
 
-/** Every heading slug and explicit <a id|name> in a markdown file's rendered text. */
+/**
+ * Every heading slug and explicit <a id|name> in a markdown file's rendered text.
+ * A repeated slug takes the next -1, -2 … suffix not already taken, so headings
+ * "Setup", "Setup", "Setup-1" give setup, setup-1, setup-1-1 (github-slugger's rule).
+ */
 export function anchorsOf(path) {
-  const seen = new Map(); const out = new Set();
+  const taken = new Map(); const out = new Set();
   for (const { line } of proseLines(readFileSync(path, 'utf8'))) {
     const m = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
     if (m) {
       const base = slugify(m[1]);
-      const n = seen.get(base) ?? 0; seen.set(base, n + 1);
-      out.add(n === 0 ? base : `${base}-${n}`);
+      let slug = base;
+      while (taken.has(slug)) { taken.set(base, taken.get(base) + 1); slug = `${base}-${taken.get(base)}`; }
+      taken.set(slug, 0);
+      out.add(slug);
     }
     for (const m of withoutCodeSpans(line).matchAll(/<a\s+(?:id|name)="([^"]+)"/g)) out.add(m[1]);
   }
