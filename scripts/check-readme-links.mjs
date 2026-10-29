@@ -128,21 +128,24 @@ function attributeValue(raw) {
  * whitespace around an attribute's = and a value that is double-quoted,
  * single-quoted or unquoted (running to whitespace or >), so <a id = "x">,
  * <a href=guide.md> and <img src='a.png'> all count. Only text inside a tag is
- * read as attributes, so a ?src=x in a link's query is not one. A tag still
- * open at the end of the line is returned as open, and passing that name back
- * with the next line reads that line's start as the rest of the tag.
+ * read as attributes, so a ?src=x in a link's query is not one. A < after an
+ * odd number of backslashes is escaped markdown text, so \<img src="x.png"> is
+ * no tag, while after \\ the tag is real. A tag still open at the end of the
+ * line, quoted value included, is not returned: its text so far is returned as
+ * open, and passing that back with the next line reads the two as one, so the
+ * tag is returned with the line it closes on.
  */
 function startTags(text, open = null) {
   const tags = [];
-  const src = open ? `<${open} ${text}` : text;
+  const src = open ? `${open}\n${text}` : text;
   let still = null;
-  for (const t of src.matchAll(/<([A-Za-z][A-Za-z0-9-]*)(?=[\s/>]|$)((?:"[^"]*"|'[^']*'|[^"'>])*)/g)) {
+  for (const t of src.matchAll(/(?<=(?:^|[^\\])(?:\\\\)*)<([A-Za-z][A-Za-z0-9-]*)(?=[\s/>]|$)((?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^"'>])*)/g)) {
+    if (t.index + t[0].length === src.length) { still = src.slice(t.index); break; }
     const attrs = [];
     for (const a of t[2].matchAll(/([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) {
       attrs.push([a[1].toLowerCase(), attributeValue(a[2] ?? a[3] ?? a[4] ?? '')]);
     }
     tags.push({ name: t[1].toLowerCase(), attrs });
-    still = t.index + t[0].length === src.length ? t[1] : null;
   }
   return { tags, open: still };
 }
@@ -354,7 +357,8 @@ export function targetsOf(src) {
     // A footnote definition ([^label]: prose) is not a link.
     for (const m of text.matchAll(/^\s{0,3}\[(?!\^)[^\]]+\]:\s*(?:<([^<>]*)>|(\S+))/g)) add(markdownTarget(m[1] ?? m[2]));
     // raw html: <a href>, <img src> hold one URL each; <source srcset>, <img
-    // srcset> hold a list of "URL descriptor" candidates. A tag may span lines.
+    // srcset> hold a list of "URL descriptor" candidates. A tag may span lines,
+    // and its targets carry the line it closes on.
     const html = startTags(text, open);
     open = html.open;
     for (const tag of html.tags) {
