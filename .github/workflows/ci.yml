@@ -54,6 +54,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # Once per matrix, not per leg: fails when a relative link, image or
+      # #anchor in the README or docs/ stops resolving. No network.
+      - name: README and docs links resolve
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: node scripts/check-readme-links.mjs
 
   package:
     name: packed tarball (${{ matrix.os }})
