@@ -3,7 +3,8 @@
 //
 // Checks, with no network access:
 //   - relative file targets exist (links, <a href>, <img src>, and every
-//     candidate URL in a <source srcset> or <img srcset>, without its descriptor)
+//     candidate URL in a <source srcset> or <img srcset>, without its descriptor);
+//     a ?query is not part of the file name
 //   - #fragments, percent-decoded, resolve to a heading (GitHub's slug rules)
 //     or an explicit <a id="…"> / <a name="…"> in the target file, README included
 //   - mailto: / http(s): / data: targets are left alone (external reachability
@@ -293,14 +294,24 @@ export function targetsOf(src) {
   for (const { line, i } of proseLines(src)) {
     const text = withoutCodeSpans(line);
     const add = (t) => { if (t) targets.push({ t, line: i + 1 }); };
-    // inline links and images: [text](target "title"), ![alt](<target>). A ] after
-    // an odd run of backslashes is escaped, not a link's end; after \\ it is one.
-    for (let k = text.indexOf(']('); k >= 0; k = text.indexOf('](', k + 1)) {
-      let b = k;
-      while (text[b - 1] === '\\') b--;
-      if ((k - b) % 2) continue;
+    // inline links and images: [text](target "title"), ![alt](<target>). A link
+    // needs a ] that closes an unescaped [ before it, so \[a](b.md) and a lone
+    // ](b.md) are text; a backslash escapes the character after it, so after \\
+    // a bracket counts. A link cannot hold a link, so one closes every [ before
+    // it; an image can sit inside a link, so [![alt](a.png)](b.md) gives both.
+    const opens = [];
+    for (let k = 0; k < text.length; k++) {
+      const c = text[k];
+      if (c === '\\') { k++; continue; }
+      if (c === '[') { opens.push({ image: text[k - 1] === '!' }); continue; }
+      if (c !== ']' || !opens.length) continue;
+      const { image } = opens.pop();
+      if (text[k + 1] !== '(') continue;
       const link = inlineDestination(text, k + 2);
-      if (link) add(markdownTarget(link.dest));
+      if (!link) continue;
+      add(markdownTarget(link.dest));
+      if (!image) opens.length = 0;
+      k = link.end - 1;
     }
     // reference definitions: [label]: target "title": the target for every
     // [text][label] / ![alt][label] use, so checking the definition covers them.
@@ -322,8 +333,11 @@ export function checkFile(file, anchors = anchorsOf) {
   for (const { t, line } of targetsOf(readFileSync(file, 'utf8'))) {
     if (/^(https?:|mailto:|data:)/i.test(t)) continue;
     checked++;
+    // path?query#fragment: a query (?plain=1, ?raw=true) is not part of the file name.
     const hash = t.indexOf('#');
-    const pathPart = hash < 0 ? t : t.slice(0, hash);
+    const beforeHash = hash < 0 ? t : t.slice(0, hash);
+    const query = beforeHash.indexOf('?');
+    const pathPart = query < 0 ? beforeHash : beforeHash.slice(0, query);
     const path = decoded(pathPart);
     const frag = hash < 0 ? undefined : decoded(t.slice(hash + 1));
     if (path === null || frag === null) { failures.push(`${file}:${line} → ${t} (malformed percent-escape)`); continue; }

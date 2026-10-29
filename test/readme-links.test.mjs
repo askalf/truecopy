@@ -111,6 +111,22 @@ test('checkFile: a missing file, heading or anchor fails', (t) => {
   ]);
 });
 
+test('checkFile: a query is not part of the file name, and the fragment after it is still checked', (t) => {
+  const file = fixture(t, [
+    '[a](docs/guide.md?plain=1) [b](docs/guide.md?plain=1#getting-started) ![c](img/a.png?raw=true)',
+    '<img src="img/b.png?raw=true"> <source srcset="img/a.png?raw=true 1x, img/b.png?raw=true 2x">',
+    '[d](docs/missing.md?plain=1) ![e](img/gone.png?raw=true) [f](docs/guide.md?plain=1#nope)',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 9);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    'docs/missing.md?plain=1 (file not found)',
+    'img/gone.png?raw=true (file not found)',
+    'docs/guide.md?plain=1#nope (no heading or anchor "#nope" in docs/guide.md)',
+  ]);
+});
+
 test('checkFile: external and data targets are not checked', (t) => {
   const file = fixture(t, '[w](https://example.com/x) [m](mailto:a@example.com) <img src="data:image/png;base64,AA==">\n<source srcset="https://example.com/a.png 1x, img/a.png 2x">\n');
   assert.deepEqual(checkFile(file), { checked: 1, failures: [] });
@@ -119,6 +135,23 @@ test('checkFile: external and data targets are not checked', (t) => {
 test('targetsOf: links in inline code spans are not targets', () => {
   const src = 'Write `[a](missing.md)` or `` `<img src="x.png">` ``, see [b](b.md).\n';
   assert.deepEqual(targetsOf(src).map((x) => x.t), ['b.md']);
+});
+
+test('targetsOf: a link needs an unescaped [ before its ]', () => {
+  assert.deepEqual(targetsOf('\\[example](missing.md) and [real](real.md)\n').map((x) => x.t), ['real.md']);
+  assert.deepEqual(targetsOf('see ](missing.md) then [real](real.md)\n').map((x) => x.t), ['real.md']);
+  assert.deepEqual(targetsOf('[real](real.md) then ](missing.md)\n').map((x) => x.t), ['real.md']);
+  // After \\ the [ is not escaped, so the link renders.
+  assert.deepEqual(targetsOf('\\\\[real](real.md)\n').map((x) => x.t), ['real.md']);
+  // An image inside a link: both destinations are targets.
+  assert.deepEqual(targetsOf('[![badge](img/a.png)](docs/guide.md) [a [b] c](x.md)\n').map((x) => x.t), ['img/a.png', 'docs/guide.md', 'x.md']);
+});
+
+test('checkFile: escaped-bracket examples and stray ] are text, real links on the line are checked', (t) => {
+  const file = fixture(t, 'Write \\[example](missing.md) or ](also-missing.md); see [guide](docs/guide.md) and [bad](gone.md).\n');
+  const r = checkFile(file);
+  assert.equal(r.checked, 2);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), ['gone.md (file not found)']);
 });
 
 test('checkFile: a percent-encoded fragment matches its decoded heading', (t) => {
