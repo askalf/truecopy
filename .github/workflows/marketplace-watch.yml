@@ -38,7 +38,7 @@ concurrency:
 
 jobs:
   watch:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository == 'askalf/truecopy' && fromJSON('["self-hosted","truecopy-exec"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: write # push the snapshot to the watch branch
