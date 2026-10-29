@@ -3,3 +3,9 @@
 # stable across contributor OSes only if the bytes don't get rewritten by git's
 # autocrlf. `text=auto` still auto-detects binary fixtures and leaves them alone.
 * text=auto eol=lf
+
+# Captured CLI output, not hand-written text: scripts/readme/terminal.mjs
+# generates this file from a real run of the CLI, so its punctuation is the
+# CLI's own. The public-text and redline checks read this mark from the base
+# commit and skip wording findings on the file.
+.github/readme/terminal.svg redline-protected
