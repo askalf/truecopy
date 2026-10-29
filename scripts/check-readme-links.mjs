@@ -122,12 +122,14 @@ function markdownTarget(raw) {
 }
 
 /**
- * The destination of the inline link whose "](" ends just before index i, or
- * null when none parses there. <...> runs to the first >; a bare destination
- * runs to whitespace or to the ) that leaves its own parentheses unbalanced, so
+ * The inline link whose "](" ends just before index i, as { dest, end } with end
+ * just past its closing ), or null when none parses there. Whitespace may lead
+ * the destination. <...> runs to the first >; a bare destination runs to
+ * whitespace or to the ) that leaves its own parentheses unbalanced, so
  * guide(v2).md is one file name. An optional quoted or (...) title and a ) follow.
  */
 function inlineDestination(text, i) {
+  while (text[i] === ' ' || text[i] === '\t') i++;
   let j = i;
   let dest;
   if (text[i] === '<') {
@@ -146,7 +148,30 @@ function inlineDestination(text, i) {
     if (depth !== 0) return null;
     dest = text.slice(i, j);
   }
-  return /^(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^()]*\)))?[ \t]*\)/.test(text.slice(j)) ? dest : null;
+  const tail = text.slice(j).match(/^(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^()]*\)))?[ \t]*\)/);
+  return tail ? { dest, end: j + tail[0].length } : null;
+}
+
+/**
+ * Text with its inline images dropped (images: true) or its inline links turned
+ * into their text (images: false), destinations parsed as inlineDestination
+ * parses them, so [Guide](docs/guide(v2).md) renders as Guide.
+ */
+function withoutInlineLinks(text, images) {
+  let out = '';
+  let last = 0;
+  for (let k = text.indexOf(']('); k >= 0; k = text.indexOf('](', k + 1)) {
+    const open = text.lastIndexOf('[', k);
+    if (open < last || text.slice(open + 1, k).includes(']')) continue;
+    const isImage = open > 0 && text[open - 1] === '!';
+    if (isImage !== images) continue;
+    const link = inlineDestination(text, k + 2);
+    if (!link) continue;
+    out += images ? text.slice(last, open - 1) : text.slice(last, open) + text.slice(open + 1, k);
+    last = link.end;
+    k = link.end - 1;
+  }
+  return out + text.slice(last);
 }
 
 /**
@@ -177,7 +202,7 @@ export function slugify(text) {
   // Looping until nothing changes handles nested/split tags; this is slug
   // derivation for comparison, not sanitization of anything rendered.
   for (let prev = null; prev !== r; ) { prev = r; r = r.replace(HTML_TAG, ''); }
-  r = withoutUnderscoreEmphasis(r.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'));
+  r = withoutUnderscoreEmphasis(withoutInlineLinks(withoutInlineLinks(r, true), false));
   r = decodeReferences(r.replace(/\p{Co}/gu, (c) => code[c.charCodeAt(0) - 0xE000].replace(/&/g, '&amp;')));
   return r === null ? null : r.toLowerCase().replace(/[^\p{L}\p{M}\p{N} _-]/gu, '').replace(/ /g, '-');
 }
@@ -261,8 +286,8 @@ export function targetsOf(src) {
     // inline links and images: [text](target "title"), ![alt](<target>); a \] is not a link's end
     for (let k = text.indexOf(']('); k >= 0; k = text.indexOf('](', k + 1)) {
       if (text[k - 1] === '\\') continue;
-      const dest = inlineDestination(text, k + 2);
-      if (dest !== null) add(markdownTarget(dest));
+      const link = inlineDestination(text, k + 2);
+      if (link) add(markdownTarget(link.dest));
     }
     // reference definitions: [label]: target "title": the target for every
     // [text][label] / ![alt][label] use, so checking the definition covers them.

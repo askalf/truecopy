@@ -216,6 +216,32 @@ test('checkFile: a file name with parentheses resolves, a missing one fails', (t
   assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), ['docs/gone(v2).md (file not found)']);
 });
 
+test('targetsOf: whitespace may lead a bare or <...> destination', () => {
+  const src = '[a]( x.md ) [b](  <y z.md>  "t") [c](\tw.md\t)\n';
+  assert.deepEqual(targetsOf(src).map((x) => x.t), ['x.md', 'y z.md', 'w.md']);
+});
+
+test('checkFile: a whitespace-led link resolves, a missing one fails', (t) => {
+  const file = fixture(t, '[a]( docs/guide.md ) [b]( <docs/guide.md#custom> ) [c]( missing.md )\n');
+  const r = checkFile(file);
+  assert.equal(r.checked, 3);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), ['missing.md (file not found)']);
+});
+
+test('slugify: a link or image destination with parentheses leaves only the text', () => {
+  assert.equal(slugify('[Guide](docs/guide(v2).md)'), 'guide');
+  assert.equal(slugify('![logo](img/a(1).png) Title'), '-title');
+  assert.equal(slugify('[A](a(1).md) and [B]( b.md "t")'), 'a-and-b');
+});
+
+test('checkFile: a heading linking to a parenthesized file slugs by its text', (t) => {
+  const file = fixture(t, '## [Guide](docs/guide(v2).md)\n\n[jump](#guide) [bad](#guidemd)\n');
+  writeFileSync(path.join(path.dirname(file), 'docs', 'guide(v2).md'), '# V2\n');
+  assert.deepEqual(checkFile(file).failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    '#guidemd (no heading or anchor "#guidemd" in this file)',
+  ]);
+});
+
 test('checkFile: headings and anchors match after character references decode', (t) => {
   const file = fixture(t, [
     '## A &amp; B',
