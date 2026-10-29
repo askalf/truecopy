@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { srcsetUrls, targetsOf, checkFile } from '../scripts/check-readme-links.mjs';
+import { slugify, proseLines, srcsetUrls, targetsOf, checkFile } from '../scripts/check-readme-links.mjs';
 
 const script = fileURLToPath(new URL('../scripts/check-readme-links.mjs', import.meta.url));
 
@@ -154,6 +154,73 @@ test('checkFile: an anchor that only appears in code does not count', (t) => {
     '#fenced (no heading or anchor "#fenced" in this file)',
     '#inline (no heading or anchor "#inline" in this file)',
   ]);
+});
+
+// The rendered text of each heading below is what GitHub's markdown API returned
+// for it (2026-10-28); the slug is GitHub's slugger applied to that text.
+test('slugify: follows GitHub on underscores, code, emphasis and punctuation', () => {
+  const cases = [
+    ['foo_bar', 'foo_bar'],
+    ['`snake_case` in code', 'snake_case-in-code'],
+    ['_emph_ word', 'emph-word'],
+    ['__strong__ word', 'strong-word'],
+    ['a _b_ c', 'a-b-c'],
+    ['_private', '_private'],
+    ['snake_case_name and more_', 'snake_case_name-and-more_'],
+    ['**bold** and *it*', 'bold-and-it'],
+    ['🚀 Launch', '-launch'],
+    ['Café déjà vu', 'café-déjà-vu'],
+    ['Use `--strict` mode', 'use---strict-mode'],
+    ['[Link text](https://example.com) here', 'link-text-here'],
+    ['<kbd>Ctrl</kbd> key', 'ctrl-key'],
+    ["What's new? (v2.0)", 'whats-new-v20'],
+    ['Two  spaces', 'two--spaces'],
+    ['A & B', 'a--b'],
+  ];
+  for (const [heading, slug] of cases) assert.equal(slugify(heading), slug, heading);
+});
+
+test('checkFile: links to headings with literal underscores resolve', (t) => {
+  const file = fixture(t, '## foo_bar\n\n## `snake_case` here\n\n[a](#foo_bar) [b](#snake_case-here)\n');
+  assert.deepEqual(checkFile(file), { checked: 2, failures: [] });
+});
+
+test('proseLines: a fence closes only on the same character, at least as long, alone', () => {
+  const src = [
+    '````md',     // 0 opens a 4-backtick fence
+    '```',        // 1 shorter: stays inside
+    '``` x',      // 2 trailing text: stays inside
+    '~~~~',       // 3 other character: stays inside
+    '`````',      // 4 longer, same character: closes
+    'prose',      // 5
+    '~~~',        // 6 opens a tilde fence
+    '```',        // 7 other character: stays inside
+    '~~~~',       // 8 closes
+    '``` a`b',    // 9 backtick in the info string: not a fence
+    '',
+  ].join('\n');
+  assert.deepEqual(proseLines(src).map((x) => x.i), [5, 9, 10]);
+});
+
+test('checkFile: a nested fence neither hides nor exposes links', (t) => {
+  const file = fixture(t, [
+    '````md',
+    '```',
+    '[example](missing.md)',
+    '```',
+    '````',
+    '',
+    '~~~',
+    '```',
+    '[also](missing-too.md)',
+    '~~~',
+    '',
+    '[real](gone.md) [fine](docs/guide.md)',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 2);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), ['gone.md (file not found)']);
 });
 
 test('the script exits 0 on a clean file and 1 on a broken one', (t) => {
