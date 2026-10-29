@@ -4,10 +4,15 @@
 // Checks, with no network access:
 //   - relative file targets exist (links, <a href>, <img src>, and every
 //     candidate URL in a <source srcset> or <img srcset>, without its descriptor)
-//   - #fragments resolve to a heading (GitHub's slug rules) or an explicit
-//     <a id="…"> / <a name="…"> in the target file, README included
+//   - #fragments, percent-decoded, resolve to a heading (GitHub's slug rules)
+//     or an explicit <a id="…"> / <a name="…"> in the target file, README included
 //   - mailto: / http(s): / data: targets are left alone (external reachability
 //     is not a property of this repo)
+//
+// Only rendered text counts: a link or <a id> inside fenced code or an inline
+// code span is an example, not a link or an anchor. It reads markdown line by
+// line, not with a parser, so indented code blocks, HTML comments and code
+// spans that cross a line break are read as rendered text.
 //
 // Usage: node scripts/check-readme-links.mjs [file.md ...]   (default: README.md + docs/*.md)
 // test/readme-links.test.mjs drives the exported functions against fixtures.
@@ -31,7 +36,17 @@ export function slugify(text) {
     .replace(/\s/g, '-');
 }
 
-/** Every heading slug and explicit <a id|name> in a markdown file. */
+/** The line with its inline code spans removed. A span opened by N backticks closes at the next run of exactly N. */
+function withoutCodeSpans(line) {
+  return line.replace(/(`+)(?!`).*?(?<!`)\1(?!`)/g, '');
+}
+
+/** Percent-decoded text, or null when an escape is malformed. */
+function decoded(s) {
+  try { return decodeURIComponent(s); } catch { return null; }
+}
+
+/** Every heading slug and explicit <a id|name> in a markdown file's rendered text. */
 export function anchorsOf(path) {
   const src = readFileSync(path, 'utf8');
   const seen = new Map(); const out = new Set();
@@ -45,8 +60,8 @@ export function anchorsOf(path) {
       const n = seen.get(base) ?? 0; seen.set(base, n + 1);
       out.add(n === 0 ? base : `${base}-${n}`);
     }
+    for (const m of withoutCodeSpans(line).matchAll(/<a\s+(?:id|name)="([^"]+)"/g)) out.add(m[1]);
   }
-  for (const m of src.matchAll(/<a\s+(?:id|name)="([^"]+)"/g)) out.add(m[1]);
   return out;
 }
 
@@ -78,16 +93,17 @@ export function targetsOf(src) {
   src.split('\n').forEach((line, i) => {
     if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; return; }
     if (inFence) return;
+    const text = withoutCodeSpans(line);
     // inline links and images: [text](target "title"), ![alt](target)
-    for (const m of line.matchAll(/\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)/g)) targets.push({ t: m[1], line: i + 1 });
+    for (const m of text.matchAll(/\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)/g)) targets.push({ t: m[1], line: i + 1 });
     // reference definitions: [label]: target "title": the target for every
     // [text][label] / ![alt][label] use, so checking the definition covers them.
     // A footnote definition ([^label]: prose) is not a link.
-    for (const m of line.matchAll(/^\s{0,3}\[(?!\^)[^\]]+\]:\s*<?([^\s>]+)>?(?:\s+.*)?$/g)) targets.push({ t: m[1], line: i + 1 });
+    for (const m of text.matchAll(/^\s{0,3}\[(?!\^)[^\]]+\]:\s*<?([^\s>]+)>?(?:\s+.*)?$/g)) targets.push({ t: m[1], line: i + 1 });
     // raw html: <a href>, <img src> hold one URL each
-    for (const m of line.matchAll(/\b(?:href|src)="([^"]+)"/g)) targets.push({ t: m[1], line: i + 1 });
+    for (const m of text.matchAll(/\b(?:href|src)="([^"]+)"/g)) targets.push({ t: m[1], line: i + 1 });
     // <source srcset>, <img srcset> hold a list of "URL descriptor" candidates
-    for (const m of line.matchAll(/\bsrcset="([^"]+)"/g)) for (const t of srcsetUrls(m[1])) targets.push({ t, line: i + 1 });
+    for (const m of text.matchAll(/\bsrcset="([^"]+)"/g)) for (const t of srcsetUrls(m[1])) targets.push({ t, line: i + 1 });
   });
   return targets;
 }
@@ -100,10 +116,14 @@ export function checkFile(file, anchors = anchorsOf) {
   for (const { t, line } of targetsOf(readFileSync(file, 'utf8'))) {
     if (/^(https?:|mailto:|data:)/i.test(t)) continue;
     checked++;
-    const [pathPart, frag] = t.split('#');
+    const hash = t.indexOf('#');
+    const pathPart = hash < 0 ? t : t.slice(0, hash);
+    const path = decoded(pathPart);
+    const frag = hash < 0 ? undefined : decoded(t.slice(hash + 1));
+    if (path === null || frag === null) { failures.push(`${file}:${line} → ${t} (malformed percent-escape)`); continue; }
     let target = file;
-    if (pathPart) {
-      const p = resolve(base, decodeURIComponent(pathPart));
+    if (path) {
+      const p = resolve(base, path);
       if (!existsSync(p)) { failures.push(`${file}:${line} → ${t} (file not found)`); continue; }
       if (statSync(p).isDirectory()) { if (frag) failures.push(`${file}:${line} → ${t} (fragment on a directory)`); continue; }
       target = p;

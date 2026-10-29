@@ -116,6 +116,46 @@ test('checkFile: external and data targets are not checked', (t) => {
   assert.deepEqual(checkFile(file), { checked: 1, failures: [] });
 });
 
+test('targetsOf: links in inline code spans are not targets', () => {
+  const src = 'Write `[a](missing.md)` or `` `<img src="x.png">` ``, see [b](b.md).\n';
+  assert.deepEqual(targetsOf(src).map((x) => x.t), ['b.md']);
+});
+
+test('checkFile: a percent-encoded fragment matches its decoded heading', (t) => {
+  const file = fixture(t, '# Café\n\n[encoded](#caf%C3%A9) [plain](#café)\n');
+  assert.deepEqual(checkFile(file), { checked: 2, failures: [] });
+});
+
+test('checkFile: a malformed percent-escape fails with its own message', (t) => {
+  const file = fixture(t, '# Café\n\n[frag](#caf%E9) [path](img/%E9.png)\n');
+  const r = checkFile(file);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    '#caf%E9 (malformed percent-escape)',
+    'img/%E9.png (malformed percent-escape)',
+  ]);
+});
+
+test('checkFile: an anchor that only appears in code does not count', (t) => {
+  const file = fixture(t, [
+    '```html',
+    '<a id="fenced"></a>',
+    '```',
+    '',
+    'Mark a section with `<a id="inline"></a>`.',
+    '',
+    '<a id="real"></a>',
+    '',
+    '[a](#fenced) [b](#inline) [c](#real)',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 3);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    '#fenced (no heading or anchor "#fenced" in this file)',
+    '#inline (no heading or anchor "#inline" in this file)',
+  ]);
+});
+
 test('the script exits 0 on a clean file and 1 on a broken one', (t) => {
   const good = fixture(t, '<source srcset="img/a.png 1x, img/b.png 2x">\n');
   const ok = spawnSync(process.execPath, [script, good], { encoding: 'utf8' });
