@@ -13,7 +13,9 @@
 // code span is an example, not a link or an anchor. It reads markdown line by
 // line, not with a parser, so indented code blocks, HTML comments and code
 // spans that cross a line break are read as rendered text, and only # headings
-// are headings: a link to an underlined (=== or ---) heading fails.
+// are headings: a link to an underlined (=== or ---) heading fails. So does a
+// link to a heading holding a named character reference outside the short
+// NAMED table: write the character itself.
 //
 // Usage: node scripts/check-readme-links.mjs [file.md ...]   (default: README.md + docs/*.md)
 // test/readme-links.test.mjs drives the exported functions against fixtures.
@@ -82,19 +84,87 @@ function withoutUnderscoreEmphasis(text) {
   return s;
 }
 
+/** The named character references this checker decodes, as code points. HTML has over two thousand. */
+const NAMED = {
+  amp: 0x26, lt: 0x3C, gt: 0x3E, quot: 0x22, apos: 0x27, nbsp: 0xA0, copy: 0xA9, reg: 0xAE,
+  trade: 0x2122, hellip: 0x2026, mdash: 0x2014, ndash: 0x2013, lsquo: 0x2018, rsquo: 0x2019,
+  ldquo: 0x201C, rdquo: 0x201D, laquo: 0xAB, raquo: 0xBB, middot: 0xB7, bull: 0x2022,
+  times: 0xD7, deg: 0xB0, larr: 0x2190, rarr: 0x2192, check: 0x2713,
+};
+
 /**
- * GitHub's heading slug. The text first goes the way GitHub renders it: code
- * spans found first and kept as their literal content, then, outside code, tags
- * dropped, links and images to their text, underscore emphasis dropped. Then
- * GitHub's slugger: lowercase, every character but a letter, mark, number,
- * space, hyphen or underscore removed, each space to a hyphen, no trim after
- * (so "🚀 Launch" is "-launch"). anchorsOf gives duplicates their suffixes.
+ * Text with its character references decoded (&amp; &#233; &#xE9;), or null when
+ * it holds a named one outside NAMED, whose meaning this checker cannot know. A
+ * numeric reference to no character (0, a surrogate, past U+10FFFF) is U+FFFD.
+ */
+function decodeReferences(text) {
+  let unknown = false;
+  const out = text.replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{0,31}));/g, (ref, dec, hex, name) => {
+    if (name) {
+      if (Object.hasOwn(NAMED, name)) return String.fromCodePoint(NAMED[name]);
+      unknown = true;
+      return ref;
+    }
+    const n = dec ? Number(dec) : parseInt(hex, 16);
+    return String.fromCodePoint(n === 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) ? 0xFFFD : n);
+  });
+  return unknown ? null : out;
+}
+
+/** An HTML attribute value as the browser reads it: character references decoded. */
+function attributeValue(raw) {
+  return decodeReferences(raw) ?? raw;
+}
+
+/** A markdown link destination as the browser gets it: backslash escapes and character references undone. */
+function markdownTarget(raw) {
+  return attributeValue(raw.replace(/\\([!-/:-@[-`{-~])/g, '$1'));
+}
+
+/**
+ * The destination of the inline link whose "](" ends just before index i, or
+ * null when none parses there. <...> runs to the first >; a bare destination
+ * runs to whitespace or to the ) that leaves its own parentheses unbalanced, so
+ * guide(v2).md is one file name. An optional quoted or (...) title and a ) follow.
+ */
+function inlineDestination(text, i) {
+  let j = i;
+  let dest;
+  if (text[i] === '<') {
+    for (j = i + 1; j < text.length && text[j] !== '>' && text[j] !== '<'; j += text[j] === '\\' ? 2 : 1);
+    if (text[j] !== '>') return null;
+    dest = text.slice(i + 1, j++);
+  } else {
+    let depth = 0;
+    for (; j < text.length; j++) {
+      const c = text[j];
+      if (c === '\\') { j++; continue; }
+      if (c <= ' ') break;
+      if (c === '(') depth++;
+      else if (c === ')') { if (depth === 0) break; depth--; }
+    }
+    if (depth !== 0) return null;
+    dest = text.slice(i, j);
+  }
+  return /^(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^()]*\)))?[ \t]*\)/.test(text.slice(j)) ? dest : null;
+}
+
+/**
+ * GitHub's heading slug, or null when the heading holds a character reference
+ * this checker cannot decode. The text first goes the way GitHub renders it:
+ * code spans found first and kept as their literal content; outside code, tags
+ * and images dropped (an image has no text), links to their text, underscore
+ * emphasis dropped, character references decoded. Then GitHub's slugger:
+ * lowercase, every character but a letter, mark, number, space, hyphen or
+ * underscore removed, each space to a hyphen, no trim after (so "🚀 Launch" is
+ * "-launch"). anchorsOf gives duplicates their suffixes.
  */
 export function slugify(text) {
   // Each code span is parked as one private-use character while the text around
-  // it is rendered, then put back. The slugger drops private-use characters, so
-  // removing any already in the text changes no slug.
-  const s = text.trim().replace(/[-]/g, '');
+  // it is rendered. The slugger drops private-use characters, so removing any
+  // already in the text changes no slug. Code goes back with & written as &amp;,
+  // so the one decoding pass leaves its text literal.
+  const s = text.trim().replace(/\p{Co}/gu, '');
   const code = [];
   let r = '';
   let last = 0;
@@ -107,9 +177,9 @@ export function slugify(text) {
   // Looping until nothing changes handles nested/split tags; this is slug
   // derivation for comparison, not sanitization of anything rendered.
   for (let prev = null; prev !== r; ) { prev = r; r = r.replace(HTML_TAG, ''); }
-  r = withoutUnderscoreEmphasis(r.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1'));
-  r = r.replace(/[-]/g, (c) => code[c.charCodeAt(0) - 0xE000]);
-  return r.toLowerCase().replace(/[^\p{L}\p{M}\p{N} _-]/gu, '').replace(/ /g, '-');
+  r = withoutUnderscoreEmphasis(r.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1'));
+  r = decodeReferences(r.replace(/\p{Co}/gu, (c) => code[c.charCodeAt(0) - 0xE000].replace(/&/g, '&amp;')));
+  return r === null ? null : r.toLowerCase().replace(/[^\p{L}\p{M}\p{N} _-]/gu, '').replace(/ /g, '-');
 }
 
 /** Percent-decoded text, or null when an escape is malformed. */
@@ -149,14 +219,14 @@ export function anchorsOf(path) {
   const taken = new Map(); const out = new Set();
   for (const { line } of proseLines(readFileSync(path, 'utf8'))) {
     const m = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
-    if (m) {
-      const base = slugify(m[1]);
+    const base = m && slugify(m[1]);
+    if (base != null) {
       let slug = base;
       while (taken.has(slug)) { taken.set(base, taken.get(base) + 1); slug = `${base}-${taken.get(base)}`; }
       taken.set(slug, 0);
       out.add(slug);
     }
-    for (const m of withoutCodeSpans(line).matchAll(/<a\s+(?:id|name)="([^"]+)"/g)) out.add(m[1]);
+    for (const a of withoutCodeSpans(line).matchAll(/<a\b[^>]*?\s(?:id|name)=(?:"([^"]*)"|'([^']*)')/g)) out.add(attributeValue(a[1] ?? a[2]));
   }
   return out;
 }
@@ -187,16 +257,21 @@ export function targetsOf(src) {
   const targets = [];
   for (const { line, i } of proseLines(src)) {
     const text = withoutCodeSpans(line);
-    // inline links and images: [text](target "title"), ![alt](target)
-    for (const m of text.matchAll(/\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)/g)) targets.push({ t: m[1], line: i + 1 });
+    const add = (t) => { if (t) targets.push({ t, line: i + 1 }); };
+    // inline links and images: [text](target "title"), ![alt](<target>); a \] is not a link's end
+    for (let k = text.indexOf(']('); k >= 0; k = text.indexOf('](', k + 1)) {
+      if (text[k - 1] === '\\') continue;
+      const dest = inlineDestination(text, k + 2);
+      if (dest !== null) add(markdownTarget(dest));
+    }
     // reference definitions: [label]: target "title": the target for every
     // [text][label] / ![alt][label] use, so checking the definition covers them.
     // A footnote definition ([^label]: prose) is not a link.
-    for (const m of text.matchAll(/^\s{0,3}\[(?!\^)[^\]]+\]:\s*<?([^\s>]+)>?(?:\s+.*)?$/g)) targets.push({ t: m[1], line: i + 1 });
+    for (const m of text.matchAll(/^\s{0,3}\[(?!\^)[^\]]+\]:\s*(?:<([^<>]*)>|(\S+))/g)) add(markdownTarget(m[1] ?? m[2]));
     // raw html: <a href>, <img src> hold one URL each
-    for (const m of text.matchAll(/\b(?:href|src)="([^"]+)"/g)) targets.push({ t: m[1], line: i + 1 });
+    for (const m of text.matchAll(/\b(?:href|src)=(?:"([^"]*)"|'([^']*)')/g)) add(attributeValue(m[1] ?? m[2]));
     // <source srcset>, <img srcset> hold a list of "URL descriptor" candidates
-    for (const m of text.matchAll(/\bsrcset="([^"]+)"/g)) for (const t of srcsetUrls(m[1])) targets.push({ t, line: i + 1 });
+    for (const m of text.matchAll(/\bsrcset=(?:"([^"]*)"|'([^']*)')/g)) for (const t of srcsetUrls(attributeValue(m[1] ?? m[2]))) add(t);
   }
   return targets;
 }

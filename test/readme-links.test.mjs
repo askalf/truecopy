@@ -182,8 +182,56 @@ test('slugify: follows GitHub on underscores, code, emphasis and punctuation', (
     ['[`run`](https://example.com) it', 'run-it'],
     ['See <https://example.com>', 'see-httpsexamplecom'],
     ['Note <!-- hidden --> this', 'note--this'],
+    ['A &amp; B', 'a--b'],
+    ['Caf&#233; &#x26; more', 'café--more'],
+    ['`&amp;` code', 'amp-code'],
+    ['&copy; 2026', '-2026'],
+    ['\\&amp; escaped', '-escaped'],
+    ['![logo](x.png) Title', '-title'],
   ];
   for (const [heading, slug] of cases) assert.equal(slugify(heading), slug, heading);
+});
+
+test('slugify: a named reference outside the table gives no slug, not a guess', () => {
+  // GitHub renders &frac12; as a character and leaves &bogus; as written; with
+  // no table of every name the checker cannot tell which, so it claims neither.
+  assert.equal(slugify('Half &frac12; cup'), null);
+  assert.equal(slugify('&bogus; name'), null);
+});
+
+test('targetsOf: destinations with parentheses, brackets, titles and escapes', () => {
+  const src = [
+    '[a](x(1).md) [b](<y z.md>) [c](w.md \'t\') [d](v.md (t)) [e](\\(u\\).md)',
+    '[f](q(.md) [g](a&amp;b.md) [h\\](h.md) <img src=\'s.png\'> <a href="r&#46;md">r</a>',
+    '',
+  ].join('\n');
+  assert.deepEqual(targetsOf(src).map((x) => x.t), ['x(1).md', 'y z.md', 'w.md', 'v.md', '(u).md', 'a&b.md', 's.png', 'r.md']);
+});
+
+test('checkFile: a file name with parentheses resolves, a missing one fails', (t) => {
+  const file = fixture(t, '[a](docs/guide(v2).md) [b](<docs/guide(v2).md>) [c](docs/guide(v2).md#v2 "t") [d](docs/gone(v2).md)\n');
+  writeFileSync(path.join(path.dirname(file), 'docs', 'guide(v2).md'), '# V2\n');
+  const r = checkFile(file);
+  assert.equal(r.checked, 4);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), ['docs/gone(v2).md (file not found)']);
+});
+
+test('checkFile: headings and anchors match after character references decode', (t) => {
+  const file = fixture(t, [
+    '## A &amp; B',
+    '',
+    '## Half &frac12; cup',
+    '',
+    '<a class="x" id=\'single\'></a>',
+    '',
+    '[good](#a--b) [bad](#a-amp-b) [q](#single) [h1](#half--cup) [h2](#half-frac12-cup)',
+    '',
+  ].join('\n'));
+  assert.deepEqual(checkFile(file).failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    '#a-amp-b (no heading or anchor "#a-amp-b" in this file)',
+    '#half--cup (no heading or anchor "#half--cup" in this file)',
+    '#half-frac12-cup (no heading or anchor "#half-frac12-cup" in this file)',
+  ]);
 });
 
 test('targetsOf: a backtick run with no closer of its length is literal', () => {
