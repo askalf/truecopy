@@ -6,11 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-10-29
+
 ### Fixed
 - **`truecopy --version` prints the version.** It fell through to the usage
   text and exited 2, although the bug and false-positive issue templates ask
   reporters for its output. `--version`, `-v` and `version` now print the
   package version and exit 0.
+- **A lock file in a read-only directory fails with the real error.** There,
+  `open(wx)` on the lock guard fails with `EACCES` or `EPERM` and no guard ever
+  appears, but `acquire()` retried without sleeping: it spun a full CPU core for
+  the whole 10 s wait, then blamed another truecopy process that did not exist.
+  That retry now sleeps like every other wait, and when no guard was ever seen
+  the original open error is reported instead of the timeout.
+
+### Changed
+- **The README is rewritten.** It opens on a recorded terminal run that catches
+  a poisoned server at scan and a silent update at verify, then covers the
+  attack, how scan, pin, verify and enforce work, every surface truecopy gates,
+  CI use, the dated proof figures and what truecopy is not. npm shows the copy
+  in the published tarball, so the new README reaches it with this release.
 
 ## [0.10.4] - 2026-09-25
 
