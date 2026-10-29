@@ -11,7 +11,8 @@
 //     is not a property of this repo)
 //
 // Only rendered text counts: a link or <a id> inside fenced code or an inline
-// code span is an example, not a link or an anchor. It reads markdown line by
+// code span is an example, not a link or an anchor, and link syntax or
+// backticks inside a raw HTML tag are attribute text. It reads markdown line by
 // line, not with a parser, so indented code blocks, HTML comments and code
 // spans that cross a line break are read as rendered text, and only # headings
 // are headings: a link to an underlined (=== or ---) heading fails. So does a
@@ -26,11 +27,34 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * The inline code spans in one line, found the CommonMark way: a whole run of N
- * backticks opens a span that the next run of exactly N closes, and a run with
- * no closer is literal text. Outside code a backslash escapes the character
- * after it; inside code it does not. The code is the text between the runs, one
- * space trimmed from each end when both ends have one and it is not all spaces.
+ * The backtick run at i and the inline code span it opens, found the CommonMark
+ * way: a whole run of N backticks opens a span that the next run of exactly N
+ * closes. run is where the opening run ends; span is { start, end, code }, or
+ * null when no closer follows and the run is literal text. The code is the text
+ * between the runs, one space trimmed from each end when both ends have one and
+ * it is not all spaces.
+ */
+function codeSpanAt(line, i) {
+  let j = i;
+  while (line[j] === '`') j++;
+  const n = j - i;
+  for (let k = j; k < line.length; ) {
+    if (line[k] !== '`') { k++; continue; }
+    let e = k;
+    while (line[e] === '`') e++;
+    if (e - k === n) {
+      let code = line.slice(j, k);
+      if (code.startsWith(' ') && code.endsWith(' ') && /[^ ]/.test(code)) code = code.slice(1, -1);
+      return { run: j, span: { start: i, end: e, code } };
+    }
+    k = e;
+  }
+  return { run: j, span: null };
+}
+
+/**
+ * The inline code spans in one line. Outside code a backslash escapes the
+ * character after it; inside code it does not.
  */
 function codeSpans(line) {
   const spans = [];
@@ -38,36 +62,12 @@ function codeSpans(line) {
   while (i < line.length) {
     if (line[i] === '\\') { i += 2; continue; }
     if (line[i] !== '`') { i++; continue; }
-    let j = i;
-    while (line[j] === '`') j++;
-    const n = j - i;
-    let close = -1;
-    for (let k = j; k < line.length; ) {
-      if (line[k] !== '`') { k++; continue; }
-      let e = k;
-      while (line[e] === '`') e++;
-      if (e - k === n) { close = k; break; }
-      k = e;
-    }
-    if (close < 0) { i = j; continue; }
-    let code = line.slice(j, close);
-    if (code.startsWith(' ') && code.endsWith(' ') && /[^ ]/.test(code)) code = code.slice(1, -1);
-    spans.push({ start: i, end: close + n, code });
-    i = close + n;
+    const { run, span } = codeSpanAt(line, i);
+    if (!span) { i = run; continue; }
+    spans.push(span);
+    i = span.end;
   }
   return spans;
-}
-
-/**
- * The line with each inline code span replaced by one U+FFFC, which is no
- * markup, so the text on either side of a span stays apart: [a]`x`(b.md) is
- * not a link.
- */
-function withoutCodeSpans(line) {
-  let out = '';
-  let last = 0;
-  for (const s of codeSpans(line)) { out += line.slice(last, s.start) + '\uFFFC'; last = s.end; }
-  return out + line.slice(last);
 }
 
 /**
@@ -123,31 +123,85 @@ function attributeValue(raw) {
 }
 
 /**
- * The HTML start tags in a line, as { name, attrs }: the tag name lowercased and
- * attrs its [name, value] pairs, names lowercased and values decoded. HTML allows
+ * An HTML start tag up to, not including, its closing >. A quoted value may hold
+ * > and line breaks; a match that runs to the end of its input is a tag still
+ * open there.
+ */
+const START_TAG = /<([A-Za-z][A-Za-z0-9-]*)(?=[\s/>]|$)((?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^"'>])*)/y;
+
+/**
+ * A START_TAG match as { name, attrs }: the tag name lowercased and attrs its
+ * [name, value] pairs, names lowercased and values decoded. HTML allows
  * whitespace around an attribute's = and a value that is double-quoted,
  * single-quoted or unquoted (running to whitespace or >), so <a id = "x">,
- * <a href=guide.md> and <img src='a.png'> all count. Only text inside a tag is
- * read as attributes, so a ?src=x in a link's query is not one. A < after an
- * odd number of backslashes is escaped markdown text, so \<img src="x.png"> is
- * no tag, while after \\ the tag is real. A tag still open at the end of the
- * line, quoted value included, is not returned: its text so far is returned as
- * open, and passing that back with the next line reads the two as one, so the
- * tag is returned with the line it closes on.
+ * <a href=guide.md> and <img src='a.png'> all count.
  */
-function startTags(text, open = null) {
-  const tags = [];
-  const src = open ? `${open}\n${text}` : text;
-  let still = null;
-  for (const t of src.matchAll(/(?<=(?:^|[^\\])(?:\\\\)*)<([A-Za-z][A-Za-z0-9-]*)(?=[\s/>]|$)((?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^"'>])*)/g)) {
-    if (t.index + t[0].length === src.length) { still = src.slice(t.index); break; }
-    const attrs = [];
-    for (const a of t[2].matchAll(/([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) {
-      attrs.push([a[1].toLowerCase(), attributeValue(a[2] ?? a[3] ?? a[4] ?? '')]);
-    }
-    tags.push({ name: t[1].toLowerCase(), attrs });
+function tagOf(t) {
+  const attrs = [];
+  for (const a of t[2].matchAll(/([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) {
+    attrs.push([a[1].toLowerCase(), attributeValue(a[2] ?? a[3] ?? a[4] ?? '')]);
   }
-  return { tags, open: still };
+  return { name: t[1].toLowerCase(), attrs };
+}
+
+/** The label and destination of a reference definition, [label]: target. */
+const REFERENCE_DEFINITION = /^\s{0,3}\[(?!\^)[^\]]+\]:\s*(?:<[^<>]*>|\S+)/;
+
+/**
+ * One line read left to right the way GitHub's inline parser reads it: a code
+ * span or a raw HTML tag, whichever starts first, takes its whole text. So
+ * backticks and link syntax inside a quoted attribute are attribute text, and a
+ * tag inside a code span is code. A link destination, inline or in a reference
+ * definition, is a destination, so [a](<b c.md>) holds no tag. A < after an odd
+ * number of backslashes is escaped text, so \<img src="x.png"> is no tag, while
+ * after \\ the tag is real.
+ *
+ * Returns text, the line with each code span and tag replaced by one U+FFFC,
+ * which is no markup, so the text on either side stays apart ([a]`x`(b.md) is
+ * not a link); tags, the start tags that close on this line; and open, the text
+ * so far of a tag still open at the end of the line. Passing open back with the
+ * next line reads the two as one, so a tag is returned with the line it closes
+ * on and the text it covers on that line is no markdown.
+ */
+function inlineParts(line, open = null) {
+  const tags = [];
+  const tagAt = (src, at) => { START_TAG.lastIndex = at; return START_TAG.exec(src); };
+  let text = '';
+  let last = 0;
+  let i = 0;
+  if (open) {
+    const src = `${open}\n${line}`;
+    const t = tagAt(src, 0);
+    if (t[0].length === src.length) return { text, tags, open: src };
+    tags.push(tagOf(t));
+    text = '\uFFFC';
+    i = last = t[0].length - open.length;
+  } else {
+    i = line.match(REFERENCE_DEFINITION)?.[0].length ?? 0;
+  }
+  let brackets = 0;
+  while (i < line.length) {
+    const c = line[i];
+    if (c === '\\') { i += 2; continue; }
+    if (c === '`') {
+      const { run, span } = codeSpanAt(line, i);
+      if (span) { text += line.slice(last, i) + '\uFFFC'; i = last = span.end; } else i = run;
+      continue;
+    }
+    if (c === '<') {
+      const t = tagAt(line, i);
+      if (t && i + t[0].length === line.length) return { text: text + line.slice(last, i), tags, open: line.slice(i) };
+      if (t) { tags.push(tagOf(t)); text += line.slice(last, i) + '\uFFFC'; i = last = i + t[0].length + 1; continue; }
+    }
+    if (c === '[') brackets++;
+    else if (c === ']' && brackets > 0) {
+      brackets--;
+      const link = line[i + 1] === '(' && inlineDestination(line, i + 2);
+      if (link) { i = link.end; continue; }
+    }
+    i++;
+  }
+  return { text: text + line.slice(last), tags, open: null };
 }
 
 /**
@@ -295,7 +349,7 @@ export function anchorsOf(path) {
       taken.set(slug, 0);
       out.add(slug);
     }
-    const html = startTags(withoutCodeSpans(line), open);
+    const html = inlineParts(line, open);
     open = html.open;
     for (const tag of html.tags) {
       if (tag.name !== 'a') continue;
@@ -331,7 +385,9 @@ export function targetsOf(src) {
   const targets = [];
   let open = null;
   for (const { line, i } of proseLines(src)) {
-    const text = withoutCodeSpans(line);
+    const parts = inlineParts(line, open);
+    open = parts.open;
+    const text = parts.text;
     const add = (t) => { if (t) targets.push({ t, line: i + 1 }); };
     // inline links and images: [text](target "title"), ![alt](<target>). A link
     // needs a ] that closes an unescaped [ before it, so \[a](b.md) and a lone
@@ -359,9 +415,7 @@ export function targetsOf(src) {
     // raw html: <a href>, <img src> hold one URL each; <source srcset>, <img
     // srcset> hold a list of "URL descriptor" candidates. A tag may span lines,
     // and its targets carry the line it closes on.
-    const html = startTags(text, open);
-    open = html.open;
-    for (const tag of html.tags) {
+    for (const tag of parts.tags) {
       for (const [name, value] of tag.attrs) {
         if (name === 'href' || name === 'src') add(value);
         else if (name === 'srcset') for (const t of srcsetUrls(value)) add(t);
