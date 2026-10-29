@@ -317,10 +317,11 @@ export function targetsOf(src) {
     // [text][label] / ![alt][label] use, so checking the definition covers them.
     // A footnote definition ([^label]: prose) is not a link.
     for (const m of text.matchAll(/^\s{0,3}\[(?!\^)[^\]]+\]:\s*(?:<([^<>]*)>|(\S+))/g)) add(markdownTarget(m[1] ?? m[2]));
-    // raw html: <a href>, <img src> hold one URL each
-    for (const m of text.matchAll(/\b(?:href|src)=(?:"([^"]*)"|'([^']*)')/g)) add(attributeValue(m[1] ?? m[2]));
+    // raw html: <a href>, <img src> hold one URL each. HTML allows whitespace
+    // around the = of an attribute, so href = "x.md" is a link too.
+    for (const m of text.matchAll(/\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) add(attributeValue(m[1] ?? m[2]));
     // <source srcset>, <img srcset> hold a list of "URL descriptor" candidates
-    for (const m of text.matchAll(/\bsrcset=(?:"([^"]*)"|'([^']*)')/g)) for (const t of srcsetUrls(attributeValue(m[1] ?? m[2]))) add(t);
+    for (const m of text.matchAll(/\bsrcset\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) for (const t of srcsetUrls(attributeValue(m[1] ?? m[2]))) add(t);
   }
   return targets;
 }

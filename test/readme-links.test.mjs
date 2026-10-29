@@ -77,6 +77,21 @@ test('checkFile: a missing <img src> or markdown image fails', (t) => {
   assert.match(r.failures[1], /img\/also-gone\.png \(file not found\)/);
 });
 
+test('checkFile: whitespace around = in href, src and srcset still makes an attribute', (t) => {
+  const file = fixture(t, [
+    '<a href = "docs/guide.md">g</a> <img src =\'img/a.png\'> <source srcset= "img/a.png 1x, img/b.png 2x">',
+    '<a href\t=\t"missing.md">m</a> <img src = "img/gone.png"> <source srcset = "img/a.png 1x, img/missing.png 2x">',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 8);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    'missing.md (file not found)',
+    'img/gone.png (file not found)',
+    'img/missing.png (file not found)',
+  ]);
+});
+
 test('checkFile: links and anchors resolve across files and within one', (t) => {
   const file = fixture(t, [
     '# Intro',
