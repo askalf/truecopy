@@ -61,3 +61,48 @@ test('checkFile: escaped image and anchor examples are text', (t) => {
     '4 #custom (no heading or anchor "#custom" in this file)',
   ]);
 });
+
+test('checkFile: a tag that never closes is text, so the links after it are checked', (t) => {
+  const file = fixture(t, [
+    'Use <value',
+    '',
+    '[bad](missing.md)',
+    '',
+    'Or <img alt="x',
+    'and [also](gone.md) [ok](docs/guide.md)',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 3);
+  assert.deepEqual(failures(r), [
+    '3 missing.md (file not found)',
+    '6 gone.md (file not found)',
+  ]);
+});
+
+test('checkFile: link syntax inside an alt attribute is attribute text', (t) => {
+  const file = fixture(t, [
+    '<img alt="[example](missing.md)" src="img/a.png">',
+    '',
+    '<img alt="x"',
+    '  title="[example](missing.md)" src="img/a.png">',
+    '',
+  ].join('\n'));
+  assert.deepEqual(checkFile(file), { checked: 2, failures: [] });
+});
+
+test('checkFile: backticks in alt and title do not hide the src between them', (t) => {
+  const file = fixture(t, [
+    '<img alt="a `b" src="missing.png" title="c` d">',
+    '',
+    '<img alt="a `b"',
+    '  src="gone.png" title="c` d">',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 2);
+  assert.deepEqual(failures(r), [
+    '1 missing.png (file not found)',
+    '4 gone.png (file not found)',
+  ]);
+});

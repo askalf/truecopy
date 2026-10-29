@@ -161,9 +161,11 @@ const REFERENCE_DEFINITION = /^\s{0,3}\[(?!\^)[^\]]+\]:\s*(?:<[^<>]*>|\S+)/;
  * not a link); tags, the start tags that close on this line; and open, the text
  * so far of a tag still open at the end of the line. Passing open back with the
  * next line reads the two as one, so a tag is returned with the line it closes
- * on and the text it covers on that line is no markdown.
+ * on and the text it covers on that line is no markdown. rest gives the lines
+ * after this one in its paragraph: a tag that does not close before the
+ * paragraph ends is no tag, so its < is text and the lines after it are markdown.
  */
-function inlineParts(line, open = null) {
+function inlineParts(line, open = null, rest = () => []) {
   const tags = [];
   const tagAt = (src, at) => { START_TAG.lastIndex = at; return START_TAG.exec(src); };
   let text = '';
@@ -190,8 +192,10 @@ function inlineParts(line, open = null) {
     }
     if (c === '<') {
       const t = tagAt(line, i);
-      if (t && i + t[0].length === line.length) return { text: text + line.slice(last, i), tags, open: line.slice(i) };
-      if (t) { tags.push(tagOf(t)); text += line.slice(last, i) + '\uFFFC'; i = last = i + t[0].length + 1; continue; }
+      if (t && i + t[0].length === line.length) {
+        const src = [line.slice(i), ...rest()].join('\n');
+        if (tagAt(src, 0)[0].length < src.length) return { text: text + line.slice(last, i), tags, open: line.slice(i) };
+      } else if (t) { tags.push(tagOf(t)); text += line.slice(last, i) + '\uFFFC'; i = last = i + t[0].length + 1; continue; }
     }
     if (c === '[') brackets++;
     else if (c === ']' && brackets > 0) {
@@ -202,6 +206,16 @@ function inlineParts(line, open = null) {
     i++;
   }
   return { text: text + line.slice(last), tags, open: null };
+}
+
+/**
+ * The lines after lines[n] in its paragraph: they run until a blank line, or a
+ * gap where proseLines dropped fenced code.
+ */
+function paragraphRest(lines, n) {
+  const out = [];
+  for (let m = n + 1; m < lines.length && lines[m].i === lines[m - 1].i + 1 && /\S/.test(lines[m].line); m++) out.push(lines[m].line);
+  return out;
 }
 
 /**
@@ -340,7 +354,8 @@ export function proseLines(src) {
 export function anchorsOf(path) {
   const taken = new Map(); const out = new Set();
   let open = null;
-  for (const { line } of proseLines(readFileSync(path, 'utf8'))) {
+  const lines = proseLines(readFileSync(path, 'utf8'));
+  lines.forEach(({ line }, n) => {
     const m = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
     const base = m && slugify(m[1]);
     if (base != null) {
@@ -349,13 +364,13 @@ export function anchorsOf(path) {
       taken.set(slug, 0);
       out.add(slug);
     }
-    const html = inlineParts(line, open);
+    const html = inlineParts(line, open, () => paragraphRest(lines, n));
     open = html.open;
     for (const tag of html.tags) {
       if (tag.name !== 'a') continue;
       for (const [name, value] of tag.attrs) if (name === 'id' || name === 'name') out.add(value);
     }
-  }
+  });
   return out;
 }
 
@@ -384,8 +399,9 @@ export function srcsetUrls(value) {
 export function targetsOf(src) {
   const targets = [];
   let open = null;
-  for (const { line, i } of proseLines(src)) {
-    const parts = inlineParts(line, open);
+  const lines = proseLines(src);
+  lines.forEach(({ line, i }, n) => {
+    const parts = inlineParts(line, open, () => paragraphRest(lines, n));
     open = parts.open;
     const text = parts.text;
     const add = (t) => { if (t) targets.push({ t, line: i + 1 }); };
@@ -421,7 +437,7 @@ export function targetsOf(src) {
         else if (name === 'srcset') for (const t of srcsetUrls(value)) add(t);
       }
     }
-  }
+  });
   return targets;
 }
 
