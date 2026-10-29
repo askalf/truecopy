@@ -93,9 +93,10 @@ const NAMED = {
 };
 
 /**
- * Text with its character references decoded (&amp; &#233; &#xE9;), or null when
- * it holds a named one outside NAMED, whose meaning this checker cannot know. A
- * numeric reference to no character (0, a surrogate, past U+10FFFF) is U+FFFD.
+ * Text with its character references decoded (&amp; &#233; &#xE9;). A named one
+ * outside NAMED, whose meaning this checker cannot know, stays as written and
+ * sets unknown. A numeric reference to no character (0, a surrogate, past
+ * U+10FFFF) is U+FFFD.
  */
 function decodeReferences(text) {
   let unknown = false;
@@ -108,17 +109,22 @@ function decodeReferences(text) {
     const n = dec ? Number(dec) : parseInt(hex, 16);
     return String.fromCodePoint(n === 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) ? 0xFFFD : n);
   });
-  return unknown ? null : out;
+  return { text: out, unknown };
 }
 
 /** An HTML attribute value as the browser reads it: character references decoded. */
 function attributeValue(raw) {
-  return decodeReferences(raw) ?? raw;
+  return decodeReferences(raw).text;
 }
 
-/** A markdown link destination as the browser gets it: backslash escapes and character references undone. */
+/**
+ * A markdown link destination as GitHub serves it. Its renderer decodes character
+ * references first and undoes backslash escapes after, so a\&amp;b.md links to
+ * a&b.md and c&#92;&amp;d.md to c&d.md; GitHub's markdown API renders both so.
+ * Heading text differs: there an escaped & is literal (see slugify).
+ */
 function markdownTarget(raw) {
-  return attributeValue(raw.replace(/\\([!-/:-@[-`{-~])/g, '$1'));
+  return decodeReferences(raw).text.replace(/\\([!-/:-@[-`{-~])/g, '$1');
 }
 
 /**
@@ -177,34 +183,38 @@ function withoutInlineLinks(text, images) {
 /**
  * GitHub's heading slug, or null when the heading holds a character reference
  * this checker cannot decode. The text first goes the way GitHub renders it:
- * code spans found first and kept as their literal content; outside code, tags
- * and images dropped (an image has no text), links to their text, underscore
- * emphasis dropped, character references decoded. Then GitHub's slugger:
+ * code spans found first and kept as their literal content, then each backslash
+ * escaped character kept literal (so \&amp; is the text &amp; and \<b> is no
+ * tag); around them, tags and images dropped (an image has no text), links to
+ * their text, underscore emphasis dropped, character references decoded. Then
+ * GitHub's slugger:
  * lowercase, every character but a letter, mark, number, space, hyphen or
  * underscore removed, each space to a hyphen, no trim after (so "🚀 Launch" is
  * "-launch"). anchorsOf gives duplicates their suffixes.
  */
 export function slugify(text) {
-  // Each code span is parked as one private-use character while the text around
-  // it is rendered. The slugger drops private-use characters, so removing any
-  // already in the text changes no slug. Code goes back with & written as &amp;,
-  // so the one decoding pass leaves its text literal.
+  // Each code span and each escaped character is parked as one private-use
+  // character while the text around it is rendered, and goes back after the
+  // references are decoded, so nothing in it is read as markup. The slugger drops
+  // private-use characters, so removing any already in the text changes no slug.
   const s = text.trim().replace(/\p{Co}/gu, '');
-  const code = [];
+  const parked = [];
+  const park = (literal) => String.fromCharCode(0xE000 + parked.push(literal) - 1);
   let r = '';
   let last = 0;
   for (const span of codeSpans(s)) {
-    r += s.slice(last, span.start) + String.fromCharCode(0xE000 + code.length);
-    code.push(span.code);
+    r += s.slice(last, span.start) + park(span.code);
     last = span.end;
   }
-  r += s.slice(last);
+  r = (r + s.slice(last)).replace(/\\([!-/:-@[-`{-~])/g, (escape, c) => park(c));
   // Looping until nothing changes handles nested/split tags; this is slug
   // derivation for comparison, not sanitization of anything rendered.
   for (let prev = null; prev !== r; ) { prev = r; r = r.replace(HTML_TAG, ''); }
   r = withoutUnderscoreEmphasis(withoutInlineLinks(withoutInlineLinks(r, true), false));
-  r = decodeReferences(r.replace(/\p{Co}/gu, (c) => code[c.charCodeAt(0) - 0xE000].replace(/&/g, '&amp;')));
-  return r === null ? null : r.toLowerCase().replace(/[^\p{L}\p{M}\p{N} _-]/gu, '').replace(/ /g, '-');
+  const { text: rendered, unknown } = decodeReferences(r);
+  if (unknown) return null;
+  return rendered.replace(/\p{Co}/gu, (c) => parked[c.charCodeAt(0) - 0xE000])
+    .toLowerCase().replace(/[^\p{L}\p{M}\p{N} _-]/gu, '').replace(/ /g, '-');
 }
 
 /** Percent-decoded text, or null when an escape is malformed. */
@@ -283,9 +293,12 @@ export function targetsOf(src) {
   for (const { line, i } of proseLines(src)) {
     const text = withoutCodeSpans(line);
     const add = (t) => { if (t) targets.push({ t, line: i + 1 }); };
-    // inline links and images: [text](target "title"), ![alt](<target>); a \] is not a link's end
+    // inline links and images: [text](target "title"), ![alt](<target>). A ] after
+    // an odd run of backslashes is escaped, not a link's end; after \\ it is one.
     for (let k = text.indexOf(']('); k >= 0; k = text.indexOf('](', k + 1)) {
-      if (text[k - 1] === '\\') continue;
+      let b = k;
+      while (text[b - 1] === '\\') b--;
+      if ((k - b) % 2) continue;
       const link = inlineDestination(text, k + 2);
       if (link) add(markdownTarget(link.dest));
     }

@@ -186,8 +186,15 @@ test('slugify: follows GitHub on underscores, code, emphasis and punctuation', (
     ['Caf&#233; &#x26; more', 'café--more'],
     ['`&amp;` code', 'amp-code'],
     ['&copy; 2026', '-2026'],
-    ['\\&amp; escaped', '-escaped'],
+    ['\\&amp; escaped', 'amp-escaped'],
     ['![logo](x.png) Title', '-title'],
+    ['\\_private\\_ name', '_private_-name'],
+    ['\\<b>tag\\</b> text', 'btagb-text'],
+    ['[a\\]b](x.md) link', 'ab-link'],
+    ['_a\\_b_ word', 'a_b-word'],
+    ['\\\\&amp; double', '-double'],
+    ['`\\&amp;` code', 'amp-code'],
+    ['a&#92;&amp;b heading', 'ab-heading'],
   ];
   for (const [heading, slug] of cases) assert.equal(slugify(heading), slug, heading);
 });
@@ -239,6 +246,34 @@ test('checkFile: a heading linking to a parenthesized file slugs by its text', (
   writeFileSync(path.join(path.dirname(file), 'docs', 'guide(v2).md'), '# V2\n');
   assert.deepEqual(checkFile(file).failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
     '#guidemd (no heading or anchor "#guidemd" in this file)',
+  ]);
+});
+
+// Each href below is what GitHub's markdown API served for the destination
+// (2026-10-28): references are decoded first, backslash escapes undone after.
+test('targetsOf: references and escapes in a destination undo in GitHub order', () => {
+  const src = [
+    '[k](c&#92;&amp;d.md) [l](c&#92;_d.md) [m](e\\&#95;f.md) [n](a\\&amp;b.md)',
+    '[o](<g\\&amp;h.md>) [esc\\\\](q.md)',
+    '[r]: i\\&amp;j.md',
+    '',
+  ].join('\n');
+  assert.deepEqual(targetsOf(src).map((x) => x.t), ['c&d.md', 'c_d.md', 'e_f.md', 'a&b.md', 'g&h.md', 'q.md', 'i&j.md']);
+});
+
+test('checkFile: an escaped & is literal in a heading, and a destination decodes before it unescapes', (t) => {
+  const file = fixture(t, [
+    '## \\&amp; escaped',
+    '',
+    '[h](#amp-escaped) [g](#-escaped) [x](docs/a\\&amp;b.md) [y](docs/a&amp;amp;b.md)',
+    '',
+  ].join('\n'));
+  writeFileSync(path.join(path.dirname(file), 'docs', 'a&b.md'), '# A\n');
+  const r = checkFile(file);
+  assert.equal(r.checked, 4);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    '#-escaped (no heading or anchor "#-escaped" in this file)',
+    'docs/a&amp;b.md (file not found)',
   ]);
 });
 

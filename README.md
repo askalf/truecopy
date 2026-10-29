@@ -65,7 +65,7 @@ Agents pull tools from places you do not control: MCP servers, skill marketplace
 |---|---|---|
 | **Tool poisoning** | A description, schema or `SKILL.md` that tells the model to *"ignore previous instructions"* and send `~/.ssh/id_rsa` somewhere. The model reads it as an instruction; you never read it at all. | `scan` flags injection and exfiltration instructions in every name, description, schema and skill file, and `add` refuses to pin a poisoned one. |
 | **The silent update** | A server or skill you vetted last week ships new bytes. No diff you will ever read shows it, and the agent loads it on the next run. | Every pin records a content hash plus one hash per tool or file. `verify`, the hook, the proxy and `guard` re-derive them and fail on any change, naming what changed. |
-| **The wrong signer** | Someone substitutes the lock entry, or signs a tampered version with a key of their own. | Ed25519 signatures are checked against the trust set you commit. A valid signature from a key you do not trust fails closed as `untrusted`; `--require-signed` fails anything unsigned. |
+| **The wrong signer** | Someone substitutes the lock entry, or signs a tampered version with a key of their own. | Ed25519 signatures are checked against your trust set: your machine's own key, the keys you trust globally and the `truecopy.trust` you commit. A valid signature from a key you do not trust fails closed as `untrusted`; `--require-signed` fails anything unsigned. |
 
 ## How it works
 
@@ -148,7 +148,7 @@ Or scan a marketplace or manifest with no lock at all:
 Where trust matters, require a signature from a publisher you trust, and keep the one private signing key in a single CI secret instead of on every laptop:
 
 ```yaml
-# every pin must carry a valid signature from a key in the committed truecopy.trust
+# every pin must carry a valid signature from a key in the runner's trust set
 - run: npx -y @askalf/truecopy verify --require-signed
 
 # sign with the CI secret: no key file and no keychain on the runner
@@ -156,6 +156,8 @@ Where trust matters, require a signature from a publisher you trust, and keep th
   env:
     CANON_SIGNING_KEY: ${{ secrets.CANON_SIGNING_KEY }}
 ```
+
+On a workstation the trust set is your machine's own key, the keys you trust globally and the repo's `truecopy.trust`. A clean runner has no key and no global store, so there it is `truecopy.trust` alone: commit every publisher's public key to it, the public half of `CANON_SIGNING_KEY` included. That key signs but is never trusted just for being set.
 
 Publisher keys, the committed `truecopy.trust`, JSON reports and the signing setup: [docs/signing-and-ci.md](docs/signing-and-ci.md). This repo runs the same gate on itself in [`truecopy-gate.yml`](.github/workflows/truecopy-gate.yml).
 
