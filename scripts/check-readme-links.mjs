@@ -348,6 +348,8 @@ export function proseLines(src) {
 
 /**
  * Every heading slug and explicit <a id|name> in a markdown file's rendered text.
+ * A # line inside a tag still open from an earlier line is attribute text, read
+ * with the same state targetsOf uses, so it gives no slug.
  * A repeated slug takes the next -1, -2 … suffix not already taken, so headings
  * "Setup", "Setup", "Setup-1" give setup, setup-1, setup-1-1 (github-slugger's rule).
  */
@@ -356,7 +358,7 @@ export function anchorsOf(path) {
   let open = null;
   const lines = proseLines(readFileSync(path, 'utf8'));
   lines.forEach(({ line }, n) => {
-    const m = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
+    const m = open ? null : line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
     const base = m && slugify(m[1]);
     if (base != null) {
       let slug = base;

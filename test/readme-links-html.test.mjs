@@ -80,6 +80,22 @@ test('checkFile: a tag that never closes is text, so the links after it are chec
   ]);
 });
 
+test('checkFile: a heading-shaped line inside a multiline attribute is no heading', (t) => {
+  const file = fixture(t, [
+    '<img alt="first',
+    '# Ghost',
+    'last" src="img/a.png">',
+    '',
+    '# Real',
+    '',
+    '[jump](#ghost) [real](#real)',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 3);
+  assert.deepEqual(failures(r), ['7 #ghost (no heading or anchor "#ghost" in this file)']);
+});
+
 test('checkFile: link syntax inside an alt attribute is attribute text', (t) => {
   const file = fixture(t, [
     '<img alt="[example](missing.md)" src="img/a.png">',
