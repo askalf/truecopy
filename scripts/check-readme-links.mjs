@@ -58,11 +58,15 @@ function codeSpans(line) {
   return spans;
 }
 
-/** The line with its inline code spans removed. */
+/**
+ * The line with each inline code span replaced by one U+FFFC, which is no
+ * markup, so the text on either side of a span stays apart: [a]`x`(b.md) is
+ * not a link.
+ */
 function withoutCodeSpans(line) {
   let out = '';
   let last = 0;
-  for (const s of codeSpans(line)) { out += line.slice(last, s.start); last = s.end; }
+  for (const s of codeSpans(line)) { out += line.slice(last, s.start) + '\uFFFC'; last = s.end; }
   return out + line.slice(last);
 }
 
@@ -116,6 +120,31 @@ function decodeReferences(text) {
 /** An HTML attribute value as the browser reads it: character references decoded. */
 function attributeValue(raw) {
   return decodeReferences(raw).text;
+}
+
+/**
+ * The HTML start tags in a line, as { name, attrs }: the tag name lowercased and
+ * attrs its [name, value] pairs, names lowercased and values decoded. HTML allows
+ * whitespace around an attribute's = and a value that is double-quoted,
+ * single-quoted or unquoted (running to whitespace or >), so <a id = "x">,
+ * <a href=guide.md> and <img src='a.png'> all count. Only text inside a tag is
+ * read as attributes, so a ?src=x in a link's query is not one. A tag still
+ * open at the end of the line is returned as open, and passing that name back
+ * with the next line reads that line's start as the rest of the tag.
+ */
+function startTags(text, open = null) {
+  const tags = [];
+  const src = open ? `<${open} ${text}` : text;
+  let still = null;
+  for (const t of src.matchAll(/<([A-Za-z][A-Za-z0-9-]*)(?=[\s/>]|$)((?:"[^"]*"|'[^']*'|[^"'>])*)/g)) {
+    const attrs = [];
+    for (const a of t[2].matchAll(/([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) {
+      attrs.push([a[1].toLowerCase(), attributeValue(a[2] ?? a[3] ?? a[4] ?? '')]);
+    }
+    tags.push({ name: t[1].toLowerCase(), attrs });
+    still = t.index + t[0].length === src.length ? t[1] : null;
+  }
+  return { tags, open: still };
 }
 
 /**
@@ -253,6 +282,7 @@ export function proseLines(src) {
  */
 export function anchorsOf(path) {
   const taken = new Map(); const out = new Set();
+  let open = null;
   for (const { line } of proseLines(readFileSync(path, 'utf8'))) {
     const m = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
     const base = m && slugify(m[1]);
@@ -262,7 +292,12 @@ export function anchorsOf(path) {
       taken.set(slug, 0);
       out.add(slug);
     }
-    for (const a of withoutCodeSpans(line).matchAll(/<a\b[^>]*?\s(?:id|name)=(?:"([^"]*)"|'([^']*)')/g)) out.add(attributeValue(a[1] ?? a[2]));
+    const html = startTags(withoutCodeSpans(line), open);
+    open = html.open;
+    for (const tag of html.tags) {
+      if (tag.name !== 'a') continue;
+      for (const [name, value] of tag.attrs) if (name === 'id' || name === 'name') out.add(value);
+    }
   }
   return out;
 }
@@ -291,6 +326,7 @@ export function srcsetUrls(value) {
 /** Every link target in markdown text, with its 1-based line. Fenced code is skipped. */
 export function targetsOf(src) {
   const targets = [];
+  let open = null;
   for (const { line, i } of proseLines(src)) {
     const text = withoutCodeSpans(line);
     const add = (t) => { if (t) targets.push({ t, line: i + 1 }); };
@@ -317,11 +353,16 @@ export function targetsOf(src) {
     // [text][label] / ![alt][label] use, so checking the definition covers them.
     // A footnote definition ([^label]: prose) is not a link.
     for (const m of text.matchAll(/^\s{0,3}\[(?!\^)[^\]]+\]:\s*(?:<([^<>]*)>|(\S+))/g)) add(markdownTarget(m[1] ?? m[2]));
-    // raw html: <a href>, <img src> hold one URL each. HTML allows whitespace
-    // around the = of an attribute, so href = "x.md" is a link too.
-    for (const m of text.matchAll(/\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) add(attributeValue(m[1] ?? m[2]));
-    // <source srcset>, <img srcset> hold a list of "URL descriptor" candidates
-    for (const m of text.matchAll(/\bsrcset\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) for (const t of srcsetUrls(attributeValue(m[1] ?? m[2]))) add(t);
+    // raw html: <a href>, <img src> hold one URL each; <source srcset>, <img
+    // srcset> hold a list of "URL descriptor" candidates. A tag may span lines.
+    const html = startTags(text, open);
+    open = html.open;
+    for (const tag of html.tags) {
+      for (const [name, value] of tag.attrs) {
+        if (name === 'href' || name === 'src') add(value);
+        else if (name === 'srcset') for (const t of srcsetUrls(value)) add(t);
+      }
+    }
   }
   return targets;
 }

@@ -92,6 +92,45 @@ test('checkFile: whitespace around = in href, src and srcset still makes an attr
   ]);
 });
 
+test('checkFile: whitespace around = in <a id> and <a name> still declares an anchor', (t) => {
+  const file = fixture(t, [
+    '<a id = "custom"></a> <a class="x" name =\'named\'></a> <a id\t=\tbare></a>',
+    '',
+    '[jump](#custom) [named](#named) [bare](#bare) [none](#nowhere)',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 4);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    '#nowhere (no heading or anchor "#nowhere" in this file)',
+  ]);
+});
+
+test('checkFile: unquoted href, src and srcset values are targets', (t) => {
+  const file = fixture(t, [
+    '<a href=docs/guide.md>Guide</a> <img src=img/a.png> <source srcset=img/b.png> <a href = docs/guide.md#custom>c</a>',
+    '<a href=missing.md>Guide</a> <img src=missing.png alt=x> <img srcset=img/gone.png>',
+    '',
+  ].join('\n'));
+  const r = checkFile(file);
+  assert.equal(r.checked, 7);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), [
+    'missing.md (file not found)',
+    'missing.png (file not found)',
+    'img/gone.png (file not found)',
+  ]);
+});
+
+test('targetsOf: an attribute name only counts inside a tag', () => {
+  const src = '[q](docs/guide.md?src=x.png) <img alt="src=gone.png" src=img/a.png> plain href=nope.md text\n';
+  assert.deepEqual(targetsOf(src).map((x) => x.t), ['docs/guide.md?src=x.png', 'img/a.png']);
+});
+
+test('targetsOf: a tag that spans lines keeps its attributes', () => {
+  const src = '<img alt="x"\n     src=img/a.png\n     srcset="img/b.png 2x">\nsrc=not-a-tag.png\n';
+  assert.deepEqual(targetsOf(src).map((x) => x.t), ['img/a.png', 'img/b.png']);
+});
+
 test('checkFile: links and anchors resolve across files and within one', (t) => {
   const file = fixture(t, [
     '# Intro',
@@ -150,6 +189,18 @@ test('checkFile: external and data targets are not checked', (t) => {
 test('targetsOf: links in inline code spans are not targets', () => {
   const src = 'Write `[a](missing.md)` or `` `<img src="x.png">` ``, see [b](b.md).\n';
   assert.deepEqual(targetsOf(src).map((x) => x.t), ['b.md']);
+});
+
+test('targetsOf: a code span keeps the text on either side of it apart', () => {
+  assert.deepEqual(targetsOf('[example]`code`(missing.md) and [real](real.md)\n').map((x) => x.t), ['real.md']);
+  assert.deepEqual(targetsOf('![alt]`x`(gone.png) [`code` text](real.md)\n').map((x) => x.t), ['real.md']);
+});
+
+test('checkFile: text split by a code span is not a link, a real broken link on the line still fails', (t) => {
+  const file = fixture(t, '[example]`code`(missing.md) see [guide](docs/guide.md) and [bad](gone.md)\n');
+  const r = checkFile(file);
+  assert.equal(r.checked, 2);
+  assert.deepEqual(r.failures.map((m) => m.replace(/^.*:\d+ → /, '')), ['gone.md (file not found)']);
 });
 
 test('targetsOf: a link needs an unescaped [ before its ]', () => {
