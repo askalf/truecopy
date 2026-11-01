@@ -2,7 +2,7 @@
 
 <img src=".github/readme/hero.jpg" alt="Own your agent skills. Vet, sign and pin before it runs. MCP servers, skills and marketplaces flow through scan, pin, verify and enforce into truecopy.lock, and a poisoned skill is stopped at scan. npm i -g @askalf/truecopy. 68,560 skills poison-scanned." width="100%">
 
-# truecopy
+# @askalf/truecopy
 
 ### The supply-chain gate for agent skills and MCP servers.
 
@@ -131,7 +131,7 @@ What you can pin: an **MCP manifest** (a `.json` holding the server's `tools` ar
 
 ## In CI
 
-One line from the [GitHub Marketplace](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills) verifies the committed lock and fails the build on drift or poison:
+[truecopy-action](https://github.com/askalf/truecopy-action) is the gate that fails the build on a tampered skill. One line from the [GitHub Marketplace](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills) installs `@askalf/truecopy`, verifies the committed lock and fails the build on drift or poison:
 
 ```yaml
 - uses: askalf/truecopy-action@v1
@@ -160,7 +160,9 @@ Where trust matters, require a signature from a publisher you trust, and keep th
 
 On a workstation the trust set is your machine's own key, the keys you trust globally and the repo's `truecopy.trust`. A clean runner has no key and no global store, so there it is `truecopy.trust` alone: commit every publisher's public key to it, the public half of `CANON_SIGNING_KEY` included. That key signs but is never trusted just for being set.
 
-Publisher keys, the committed `truecopy.trust`, JSON reports and the signing setup: [docs/signing-and-ci.md](docs/signing-and-ci.md). This repo runs the same gate on itself in [`truecopy-gate.yml`](.github/workflows/truecopy-gate.yml).
+Publisher keys, the committed `truecopy.trust`, JSON reports and the signing setup: [docs/signing-and-ci.md](docs/signing-and-ci.md).
+
+The action is the integrity layer of the CI our own repositories share. [askalf/ci](https://github.com/askalf/ci) is the gate layer: the reusable workflows every pull request has to pass, Redline's code review among them, and it runs truecopy-action over the tool definitions Redline's reviewer and fixer read, so a changed tool fails the build until it is re-pinned. The jobs run on pitlane, self-hosted runners whose queue wait is measured on every job and published live on [the proof page](https://pitlane.askalf.org/), the CI on pitlane badge above. This repo passes the same layers on every pull request and runs the gate on itself in [`truecopy-gate.yml`](.github/workflows/truecopy-gate.yml).
 
 ## Proven at ecosystem scale
 
@@ -181,7 +183,7 @@ A supply-chain gate has to survive the scrutiny it applies to others.
 | **Offline** | No network calls and no telemetry. You clone or download; truecopy only reads. |
 | **Deterministic** | No model in the loop. The same bytes get the same verdict on every machine, every time. |
 | **One runtime dependency** | [`@askalf/redstamp`](https://github.com/askalf/redstamp), the detection engine, pinned to an exact release tarball. It has no dependencies of its own. |
-| **Releases** | Published to npm only from CI, through trusted publishing (OIDC) with provenance. Check yours with `npm audit signatures`. |
+| **Releases** | `@askalf/truecopy` is published to npm only from CI, through trusted publishing (OIDC) with provenance. Check yours with `npm audit signatures`. |
 | **Eats its own cooking** | This repo pins its demo manifest in its own [`truecopy.lock`](truecopy.lock) and verifies it with [truecopy-action](https://github.com/marketplace/actions/truecopy-gate-your-agent-skills) on every pull request. |
 | **Tested** | Node 20, 22 and 24 on Linux and Node 22 on Windows, plus the packed npm tarball on both. Every row of the [Claude Code policy table](docs/claude-code.md) was also verified live, each in its own fresh Claude Code session. |
 | **Hardened** | Jazzer.js fuzz targets for canonical JSON, the scanner and the MCP gate; CodeQL; [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy); [OpenSSF Best Practices](https://www.bestpractices.dev/projects/14488) passing. |
