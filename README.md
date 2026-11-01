@@ -11,6 +11,7 @@
   <a href="https://github.com/marketplace/actions/truecopy-gate-your-agent-skills"><img src="https://img.shields.io/badge/marketplace-truecopy--action-8b5cf6?logo=github" alt="GitHub Marketplace: truecopy-action"></a>
   <a href="https://github.com/askalf/truecopy/blob/watch/WATCH.md"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json" alt="Marketplace watch: the latest daily scan of the official Claude Code plugin directory"></a>
   <a href="https://github.com/askalf/truecopy/actions/workflows/ci.yml"><img src="https://github.com/askalf/truecopy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://pitlane.askalf.org/"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fpitlane.askalf.org%2Fbadge.json" alt="CI on pitlane"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy"><img src="https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/14488"><img src="https://www.bestpractices.dev/projects/14488/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://github.com/askalf/truecopy/blob/master/LICENSE"><img src="https://img.shields.io/npm/l/%40askalf%2Ftruecopy?label=license&color=8b5cf6" alt="MIT license"></a>
