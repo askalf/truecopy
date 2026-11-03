@@ -11,7 +11,7 @@
   <a href="https://github.com/marketplace/actions/truecopy-gate-your-agent-skills"><img src="https://img.shields.io/badge/marketplace-truecopy--action-8b5cf6?logo=github" alt="GitHub Marketplace: truecopy-action"></a>
   <a href="https://github.com/askalf/truecopy/blob/watch/WATCH.md"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faskalf%2Ftruecopy%2Fwatch%2Fbadge.json" alt="Marketplace watch: the latest daily scan of the official Claude Code plugin directory"></a>
   <a href="https://github.com/askalf/truecopy/actions/workflows/ci.yml"><img src="https://github.com/askalf/truecopy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://pitlane.askalf.org/"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fpitlane.askalf.org%2Fbadge.json" alt="CI on pitlane"></a>
+  <a href="https://pitlane.askalf.org/"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fpitlane.askalf.org%2Fbadge.json" alt="CI measured"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/askalf/truecopy"><img src="https://api.scorecard.dev/projects/github.com/askalf/truecopy/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/14488"><img src="https://www.bestpractices.dev/projects/14488/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://github.com/askalf/truecopy/blob/master/LICENSE"><img src="https://img.shields.io/npm/l/%40askalf%2Ftruecopy?label=license&color=8b5cf6" alt="MIT license"></a>
@@ -162,7 +162,7 @@ On a workstation the trust set is your machine's own key, the keys you trust glo
 
 Publisher keys, the committed `truecopy.trust`, JSON reports and the signing setup: [docs/signing-and-ci.md](docs/signing-and-ci.md).
 
-The action is the integrity layer of the CI our own repositories share. [askalf/ci](https://github.com/askalf/ci) is the gate layer: the reusable workflows every pull request has to pass, Redline's code review among them, and it runs truecopy-action over the tool definitions Redline's reviewer and fixer read, so a changed tool fails the build until it is re-pinned. The jobs run on pitlane, self-hosted runners whose queue wait is measured on every job and published live on [the proof page](https://pitlane.askalf.org/), the CI on pitlane badge above. This repo passes the same layers on every pull request and runs the gate on itself in [`truecopy-gate.yml`](.github/workflows/truecopy-gate.yml).
+The action is the integrity layer of the CI our own repositories share. [askalf/ci](https://github.com/askalf/ci) is the gate layer: the reusable workflows every pull request has to pass, Redline's code review among them, and it runs truecopy-action over the tool definitions Redline's reviewer and fixer read, so a changed tool fails the build until it is re-pinned. The jobs run on pitlane, the lab where [ci-wizard](https://github.com/askalf/ci-wizard)'s method is proven: self-hosted runners whose start and run times are measured on every job and published live on [the lab page](https://pitlane.askalf.org/), the CI measured badge above. This repo passes the same layers on every pull request and runs the gate on itself in [`truecopy-gate.yml`](.github/workflows/truecopy-gate.yml).
 
 ## Proven at ecosystem scale
 
