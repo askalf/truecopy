@@ -2,7 +2,7 @@
 
 Thanks for your interest in improving **truecopy** — the supply-chain gate that
 vets, signs, and pins agent skills and MCP servers before they run. Part of
-[Own Your Agent Security](https://sprayberrylabs.com).
+[Own Your Stack](https://github.com/askalf).
 
 ## Ground rules
 
