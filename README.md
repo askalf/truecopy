@@ -172,7 +172,7 @@ The action is the integrity layer of the CI our own repositories share. [askalf/
 | ClawHub, the registry whose poisoning incident started the category | 66,541 | **0 confirmed malicious.** 813 deterministic alarms, every one benign on cross-check against ClawHub's own scanner. |
 | The official directory, re-scanned every day | 2,471 | The 2026-10-29 run covered 315 plugins: **0 under review**, 463 advisories. The watch badge above always carries the latest run. |
 
-The daily watch fetches every catalog plugin, including vendor plugins at their catalog-pinned commits, and publishes each snapshot to [`WATCH.md`](https://github.com/askalf/truecopy/blob/watch/WATCH.md) and the **[live observatory at truecopy.sprayberrylabs.com](https://truecopy.sprayberrylabs.com)**. Each run also publishes a [`directory-manifest.json`](https://github.com/askalf/truecopy/blob/watch/directory-manifest.json) of the exact bytes it vetted, so `truecopy check-manifest` can hold the plugins on your own machine to the same standard.
+The daily watch fetches every catalog plugin, including vendor plugins at their catalog-pinned commits, and publishes each snapshot to [`WATCH.md`](https://github.com/askalf/truecopy/blob/watch/WATCH.md). Each run also publishes a [`directory-manifest.json`](https://github.com/askalf/truecopy/blob/watch/directory-manifest.json) of the exact bytes it vetted, so `truecopy check-manifest` can hold the plugins on your own machine to the same standard.
 
 ## Trust and transparency
 

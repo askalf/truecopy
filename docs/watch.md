@@ -1,6 +1,6 @@
 # The marketplace watch
 
-A **standing watch** re-scans the full official Claude Code plugin directory **every day** — every catalog plugin, including external vendor plugins fetched at their catalog-pinned SHAs — and publishes each snapshot to [`WATCH.md` on the `watch` branch](https://github.com/askalf/truecopy/blob/watch/WATCH.md) and the **[live observatory → truecopy.sprayberrylabs.com](https://truecopy.sprayberrylabs.com)**. The badge at the top of the README carries the always-current numbers; a poisoned skill would turn it red and the scheduled run with it.
+A **standing watch** re-scans the full official Claude Code plugin directory **every day** — every catalog plugin, including external vendor plugins fetched at their catalog-pinned SHAs — and publishes each snapshot to [`WATCH.md` on the `watch` branch](https://github.com/askalf/truecopy/blob/watch/WATCH.md). The badge at the top of the README carries the always-current numbers; a poisoned skill would turn it red and the scheduled run with it.
 
 **The watch is consumable, not just a badge.** Each run also publishes [`directory-manifest.json`](https://github.com/askalf/truecopy/blob/watch/directory-manifest.json) — name → content hash for every skill it scanned, plus the currently-flagged names. Point `check-manifest` at it and every marketplace plugin skill **installed on your machine** is compared against exactly the bytes the watch vetted:
 
