@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.6] - 2026-11-13
+
+No change to shipped code. npm shows the README inside the published package,
+so this release brings the npm page up to date with the repository.
+
+### Changed
+- **The README on npm matches the repository.** It names the package
+  `@askalf/truecopy` throughout, shows the CI measured badge, describes
+  truecopy-action and the CI gate it powers, and points the daily watch at
+  `WATCH.md`. The link to the retired observatory site is gone.
+
 ## [0.10.5] - 2026-10-29
 
 ### Fixed
